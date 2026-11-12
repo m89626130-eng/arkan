@@ -51,11 +51,11 @@ private fun ArkanApp() {
     var longitude by remember { mutableStateOf("46.257") }
     var latitude by remember { mutableStateOf("31.057") }
     var mhId by remember { mutableStateOf("MH-01") }
-    var mhDepth by remember { mutableStateOf("1.50") }
+    var mhDepth by remember { mutableStateOf("") }
     var mhLength by remember { mutableStateOf("1.10") }
     var mhWidth by remember { mutableStateOf("1.10") }
-    var mhNorthing by remember { mutableStateOf("0.0") }
-    var mhEasting by remember { mutableStateOf("0.0") }
+    var mhNorthing by remember { mutableStateOf("") }
+    var mhEasting by remember { mutableStateOf("") }
     var pendingManhole by remember { mutableStateOf<Manhole?>(null) }
     val context = LocalContext.current
 
@@ -94,7 +94,7 @@ private fun ArkanApp() {
                     when {
                         pendingManhole != null -> {
                             val mh = pendingManhole!!.copy(point = tap)
-                            manholes = manholes + mh; pendingManhole = null; status = "تمت إضافة ${mh.id} (${mh.type})"
+                            manholes = manholes + mh; mhId = "MH-%02d".format(Locale.US, manholes.size + 1); mhDepth = ""; mhNorthing = ""; mhEasting = ""; pendingManhole = null; status = "تمت إضافة ${mh.id} (${mh.type})"
                         }
                         mode == "PIPE" -> {
                             val first = pipeStart
@@ -142,15 +142,18 @@ private fun ArkanApp() {
             OutlinedTextField(mhWidth,{mhWidth=it},label={Text("العرض (م)")},singleLine=true)
             OutlinedTextField(mhNorthing,{mhNorthing=it},label={Text("N / Northing")},singleLine=true)
             OutlinedTextField(mhEasting,{mhEasting=it},label={Text("E / Easting")},singleLine=true)
-            Text("التصنيف: AS حتى 1.70م، BS حتى 3.00م، CD حتى 4.00م.")
+            Text("يجب إدخال العمق وإحداثيي N وE. التصنيف: AS حتى 1.70م، BS حتى 3.00م، CD حتى 4.00م.")
         }},
         confirmButton={ TextButton(onClick={
             try {
                 val d=mhDepth.toDouble(); val l=mhLength.toDouble(); val w=mhWidth.toDouble()
-                require(d>0 && l>0 && w>0 && d<=4.0)
-                pendingManhole=Manhole(mhId.ifBlank{"MH-${manholes.size+1}"},Offset.Zero,d,l,w,mhNorthing.toDouble(),mhEasting.toDouble())
+                val n=mhNorthing.toDouble(); val e=mhEasting.toDouble()
+                val id=mhId.trim().ifBlank { "MH-%02d".format(Locale.US, manholes.size + 1) }
+                require(d>0 && d<=4.0 && l>0 && w>0)
+                require(id !in manholes.map { it.id }) { "رقم المنهول مستخدم مسبقاً." }
+                pendingManhole=Manhole(id,Offset.Zero,d,l,w,n,e)
                 mode="MANHOLE";showManholeDialog=false;status="المس مساحة الرسم لتحديد موقع المنهول."
-            } catch(_:Exception) { status="تحقق من الأرقام؛ العمق يجب ألا يتجاوز 4.00م." }
+            } catch(_:Exception) { status="أدخل العمق والطول والعرض وإحداثيي N وE بأرقام صحيحة؛ العمق حتى 4.00م، ولا تكرر رقم المنهول." }
         }) { Text("التالي: تحديد الموقع") }},
         dismissButton={TextButton(onClick={showManholeDialog=false}) { Text("إلغاء") }}
     )
