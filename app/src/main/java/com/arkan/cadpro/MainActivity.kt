@@ -144,7 +144,7 @@ private fun ArkanApp() {
     MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF00C8A0), background = Color(0xFF101418), surface = Color(0xFF1B2329))) {
         Column(Modifier.fillMaxSize().background(Color(0xFF101418)).padding(10.dp)) {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
-            Text("V1.2 • Sewer drafting & quantities", color = Color.LightGray, fontSize = 12.sp)
+            Text("V1.3 • Sewer drafting & quantities", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(onClick = { mode = "PIPE"; pipeStart = null }) { Text("رسم أنبوب") }
