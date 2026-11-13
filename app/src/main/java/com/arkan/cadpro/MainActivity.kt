@@ -2,6 +2,8 @@ package com.arkan.cadpro
 
 import android.net.Uri
 import android.os.Bundle
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -64,6 +66,66 @@ private fun ArkanApp() {
     val lispPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) { lispName = uri.lastPathSegment ?: "LSP file selected"; status = "تم اختيار ملف LISP. شغّله في AutoCAD المكتبي باستخدام APPLOAD." }
     }
+
+    val csvSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) try {
+            val rows = mutableListOf<String>()
+            rows.add("ARKAN CAD PRO - Quantity Report")
+            rows.add("Item,Value,Unit")
+            rows.add("Total pipe length,\${String.format(Locale.US,"%.2f",totalLength)},m")
+            rows.add("Manholes count,\${manholes.size},count")
+            rows.add("Manhole excavation,\${String.format(Locale.US,"%.2f",totalExcavation)},m3")
+            rows.add("Trench width,$trenchWidth,m")
+            rows.add("Trench depth,$trenchDepth,m")
+            rows.add("Estimated pipe trench excavation,\${String.format(Locale.US,"%.2f",trenchVolume)},m3")
+            rows.add("")
+            rows.add("Pipe lengths by Layer,,")
+            layerLengths.forEach { (layer,length) -> rows.add("$layer,\${String.format(Locale.US,"%.2f",length)},m") }
+            rows.add("")
+            rows.add("Manhole ID,Type,Depth m,Length m,Width m,N,E,Excavation m3")
+            manholes.forEach { mh -> rows.add("\${mh.id},\${mh.type},\${mh.depth},\${mh.length},\${mh.width},\${mh.northing},\${mh.easting},\${String.format(Locale.US,"%.2f",mh.excavation)}") }
+            context.contentResolver.openOutputStream(uri)?.use { it.write(("\uFEFF" + rows.joinToString("\r\n")).toByteArray(Charsets.UTF_8)) }
+            status = "تم تصدير جدول الكميات بصيغة CSV المتوافقة مع Excel."
+        } catch (e: Exception) { status = "تعذر تصدير جدول Excel: \${e.message}" }
+    }
+    val pdfSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri: Uri? ->
+        if (uri != null) try {
+            val document = PdfDocument()
+            val paint = Paint().apply { textSize = 12f; color = android.graphics.Color.BLACK }
+            val lines = mutableListOf<String>()
+            lines.add("ARKAN CAD PRO - Quantity Report")
+            lines.add("Total pipe length: %.2f m".format(Locale.US,totalLength))
+            lines.add("Manholes count: \${manholes.size}")
+            lines.add("Manhole excavation: %.2f m3".format(Locale.US,totalExcavation))
+            lines.add("Trench width: $trenchWidth m")
+            lines.add("Trench depth: $trenchDepth m")
+            lines.add("Estimated pipe trench excavation: %.2f m3".format(Locale.US,trenchVolume))
+            lines.add("")
+            lines.add("Pipe lengths by Layer:")
+            layerLengths.forEach { (layer,length) -> lines.add("$layer : %.2f m".format(Locale.US,length)) }
+            lines.add("")
+            lines.add("Manholes: ID | Type | Depth | Length | Width | N | E | Excavation")
+            manholes.forEach { mh -> lines.add("\${mh.id} | \${mh.type} | \${mh.depth} | \${mh.length} | \${mh.width} | \${mh.northing} | \${mh.easting} | %.2f".format(Locale.US,mh.excavation)) }
+            var pageNumber = 1
+            var page = document.startPage(PdfDocument.PageInfo.Builder(595,842,pageNumber).create())
+            var y = 48f
+            lines.forEach { line ->
+                if (y > 800f) {
+                    document.finishPage(page)
+                    pageNumber++
+                    page = document.startPage(PdfDocument.PageInfo.Builder(595,842,pageNumber).create())
+                    y = 48f
+                }
+                page.canvas.drawText(line.take(105),36f,y,paint)
+                y += 20f
+            }
+            document.finishPage(page)
+            context.contentResolver.openOutputStream(uri)?.use { document.writeTo(it) }
+            document.close()
+            status = "تم تصدير تقرير PDF."
+        } catch (e: Exception) { status = "تعذر تصدير PDF: \${e.message}" }
+    }
+
     val kmlSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")) { uri: Uri? ->
         if (uri != null) try {
             val lon = longitude.toDouble(); val lat = latitude.toDouble()
@@ -129,6 +191,10 @@ private fun ArkanApp() {
             Text("طول الأنابيب: %.2f م | المناهيل: %d | حفر المناهيل: %.2f م³".format(Locale.US,totalLength,manholes.size,totalExcavation),color=Color(0xFF00C8A0),fontSize=12.sp)
             Text("حفر خنادق الأنابيب التقديري: %.2f م³".format(Locale.US,trenchVolume),color=Color(0xFF00C8A0),fontSize=12.sp)
             if (layerLengths.isNotEmpty()) { Text("أطوال الأنابيب حسب Layer", color=Color.White, fontSize=13.sp); layerLengths.forEach { (layer, length) -> Text("$"+"layer : %.2f م".format(Locale.US,length), color=Color(0xFFB8C7CE), fontSize=11.sp) } }
+            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                Button(onClick={csvSaver.launch("ARKAN_Quantities.csv")}) { Text("EXCEL / CSV") }
+                Button(onClick={pdfSaver.launch("ARKAN_Report.pdf")}) { Text("PDF") }
+            }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 Button(onClick={showKmlDialog=true}) { Text("EXPORT KML") }
                 Button(onClick={pipes=emptyList();manholes=emptyList();pipeStart=null;pendingManhole=null;status="تم مسح الرسم."}) { Text("CLEAR") }
