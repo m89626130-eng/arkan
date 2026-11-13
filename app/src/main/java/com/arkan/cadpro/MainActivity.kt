@@ -44,6 +44,8 @@ private fun ArkanApp() {
     var mode by remember { mutableStateOf("PIPE") }
     var pipeStart by remember { mutableStateOf<Offset?>(null) }
     var pipeLayer by remember { mutableStateOf("SEWER") }
+    var trenchWidth by remember { mutableStateOf("0.60") }
+    var trenchDepth by remember { mutableStateOf("2.00") }
     var lispName by remember { mutableStateOf("لم يتم اختيار ملف LSP") }
     var status by remember { mutableStateOf("اختر أداة ثم المس مساحة الرسم.") }
     var showManholeDialog by remember { mutableStateOf(false) }
@@ -73,11 +75,13 @@ private fun ArkanApp() {
 
     val totalLength = pipes.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER }
     val totalExcavation = manholes.sumOf { it.excavation }
+    val trenchVolume = totalLength * (trenchWidth.toDoubleOrNull() ?: 0.0) * (trenchDepth.toDoubleOrNull() ?: 0.0)
+    val layerLengths = pipes.groupBy { it.layer }.mapValues { entry -> entry.value.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER } }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF00C8A0), background = Color(0xFF101418), surface = Color(0xFF1B2329))) {
         Column(Modifier.fillMaxSize().background(Color(0xFF101418)).padding(10.dp)) {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
-            Text("V1.1 • Sewer drafting & quantities", color = Color.LightGray, fontSize = 12.sp)
+            Text("V1.2 • Sewer drafting & quantities", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(onClick = { mode = "PIPE"; pipeStart = null }) { Text("رسم أنبوب") }
@@ -86,6 +90,10 @@ private fun ArkanApp() {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(pipeLayer, { pipeLayer = it }, label = { Text("Layer الأنبوب") }, modifier = Modifier.weight(1f), singleLine = true)
                 Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("LOAD LSP") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(trenchWidth, { trenchWidth = it }, label = { Text("عرض الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
+                OutlinedTextField(trenchDepth, { trenchDepth = it }, label = { Text("عمق الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
             }
             Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
@@ -118,7 +126,9 @@ private fun ArkanApp() {
             }
             Spacer(Modifier.height(6.dp))
             Text("كل مربع = 1 متر (مقياس تجريبي) • $status", color=Color.White,fontSize=11.sp)
-            Text("الأطوال: %.2f م | المناهيل: %d | حفر المناهيل التقديري: %.2f م³".format(Locale.US,totalLength,manholes.size,totalExcavation),color=Color(0xFF00C8A0),fontSize=12.sp)
+            Text("طول الأنابيب: %.2f م | المناهيل: %d | حفر المناهيل: %.2f م³".format(Locale.US,totalLength,manholes.size,totalExcavation),color=Color(0xFF00C8A0),fontSize=12.sp)
+            Text("حفر خنادق الأنابيب التقديري: %.2f م³".format(Locale.US,trenchVolume),color=Color(0xFF00C8A0),fontSize=12.sp)
+            if (layerLengths.isNotEmpty()) { Text("أطوال الأنابيب حسب Layer", color=Color.White, fontSize=13.sp); layerLengths.forEach { (layer, length) -> Text("$"+"layer : %.2f م".format(Locale.US,length), color=Color(0xFFB8C7CE), fontSize=11.sp) } }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 Button(onClick={showKmlDialog=true}) { Text("EXPORT KML") }
                 Button(onClick={pipes=emptyList();manholes=emptyList();pipeStart=null;pendingManhole=null;status="تم مسح الرسم."}) { Text("CLEAR") }
