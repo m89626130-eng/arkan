@@ -63,6 +63,11 @@ private fun ArkanApp() {
     var pendingManhole by remember { mutableStateOf<Manhole?>(null) }
     val context = LocalContext.current
 
+    val totalLength = pipes.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER }
+    val totalExcavation = manholes.sumOf { it.excavation }
+    val trenchVolume = totalLength * (trenchWidth.toDoubleOrNull() ?: 0.0) * (trenchDepth.toDoubleOrNull() ?: 0.0)
+    val layerLengths = pipes.groupBy { it.layer }.mapValues { entry -> entry.value.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER } }
+
     val lispPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) { lispName = uri.lastPathSegment ?: "LSP file selected"; status = "تم اختيار ملف LISP. شغّله في AutoCAD المكتبي باستخدام APPLOAD." }
     }
@@ -72,21 +77,21 @@ private fun ArkanApp() {
             val rows = mutableListOf<String>()
             rows.add("ARKAN CAD PRO - Quantity Report")
             rows.add("Item,Value,Unit")
-            rows.add("Total pipe length,\${String.format(Locale.US,"%.2f",totalLength)},m")
-            rows.add("Manholes count,\${manholes.size},count")
-            rows.add("Manhole excavation,\${String.format(Locale.US,"%.2f",totalExcavation)},m3")
+            rows.add("Total pipe length,${String.format(Locale.US,"%.2f",totalLength)},m")
+            rows.add("Manholes count,${manholes.size},count")
+            rows.add("Manhole excavation,${String.format(Locale.US,"%.2f",totalExcavation)},m3")
             rows.add("Trench width,$trenchWidth,m")
             rows.add("Trench depth,$trenchDepth,m")
-            rows.add("Estimated pipe trench excavation,\${String.format(Locale.US,"%.2f",trenchVolume)},m3")
+            rows.add("Estimated pipe trench excavation,${String.format(Locale.US,"%.2f",trenchVolume)},m3")
             rows.add("")
             rows.add("Pipe lengths by Layer,,")
-            layerLengths.forEach { (layer,length) -> rows.add("$layer,\${String.format(Locale.US,"%.2f",length)},m") }
+            layerLengths.forEach { (layer,length) -> rows.add("$layer,${String.format(Locale.US,"%.2f",length)},m") }
             rows.add("")
             rows.add("Manhole ID,Type,Depth m,Length m,Width m,N,E,Excavation m3")
-            manholes.forEach { mh -> rows.add("\${mh.id},\${mh.type},\${mh.depth},\${mh.length},\${mh.width},\${mh.northing},\${mh.easting},\${String.format(Locale.US,"%.2f",mh.excavation)}") }
+            manholes.forEach { mh -> rows.add("${mh.id},${mh.type},${mh.depth},${mh.length},${mh.width},${mh.northing},${mh.easting},${String.format(Locale.US,"%.2f",mh.excavation)}") }
             context.contentResolver.openOutputStream(uri)?.use { it.write(("\uFEFF" + rows.joinToString("\r\n")).toByteArray(Charsets.UTF_8)) }
             status = "تم تصدير جدول الكميات بصيغة CSV المتوافقة مع Excel."
-        } catch (e: Exception) { status = "تعذر تصدير جدول Excel: \${e.message}" }
+        } catch (e: Exception) { status = "تعذر تصدير جدول Excel: ${e.message}" }
     }
     val pdfSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri: Uri? ->
         if (uri != null) try {
@@ -95,7 +100,7 @@ private fun ArkanApp() {
             val lines = mutableListOf<String>()
             lines.add("ARKAN CAD PRO - Quantity Report")
             lines.add("Total pipe length: %.2f m".format(Locale.US,totalLength))
-            lines.add("Manholes count: \${manholes.size}")
+            lines.add("Manholes count: ${manholes.size}")
             lines.add("Manhole excavation: %.2f m3".format(Locale.US,totalExcavation))
             lines.add("Trench width: $trenchWidth m")
             lines.add("Trench depth: $trenchDepth m")
@@ -105,7 +110,7 @@ private fun ArkanApp() {
             layerLengths.forEach { (layer,length) -> lines.add("$layer : %.2f m".format(Locale.US,length)) }
             lines.add("")
             lines.add("Manholes: ID | Type | Depth | Length | Width | N | E | Excavation")
-            manholes.forEach { mh -> lines.add("\${mh.id} | \${mh.type} | \${mh.depth} | \${mh.length} | \${mh.width} | \${mh.northing} | \${mh.easting} | %.2f".format(Locale.US,mh.excavation)) }
+            manholes.forEach { mh -> lines.add("${mh.id} | ${mh.type} | ${mh.depth} | ${mh.length} | ${mh.width} | ${mh.northing} | ${mh.easting} | %.2f".format(Locale.US,mh.excavation)) }
             var pageNumber = 1
             var page = document.startPage(PdfDocument.PageInfo.Builder(595,842,pageNumber).create())
             var y = 48f
@@ -123,7 +128,7 @@ private fun ArkanApp() {
             context.contentResolver.openOutputStream(uri)?.use { document.writeTo(it) }
             document.close()
             status = "تم تصدير تقرير PDF."
-        } catch (e: Exception) { status = "تعذر تصدير PDF: \${e.message}" }
+        } catch (e: Exception) { status = "تعذر تصدير PDF: ${e.message}" }
     }
 
     val kmlSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")) { uri: Uri? ->
@@ -135,10 +140,6 @@ private fun ArkanApp() {
         } catch (_: Exception) { status = "إحداثيات WGS84 غير صحيحة." }
     }
 
-    val totalLength = pipes.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER }
-    val totalExcavation = manholes.sumOf { it.excavation }
-    val trenchVolume = totalLength * (trenchWidth.toDoubleOrNull() ?: 0.0) * (trenchDepth.toDoubleOrNull() ?: 0.0)
-    val layerLengths = pipes.groupBy { it.layer }.mapValues { entry -> entry.value.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER } }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF00C8A0), background = Color(0xFF101418), surface = Color(0xFF1B2329))) {
         Column(Modifier.fillMaxSize().background(Color(0xFF101418)).padding(10.dp)) {
