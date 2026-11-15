@@ -329,10 +329,10 @@ private object DxfKmlImporter {
         val importedManholes = structurePositions.mapIndexed { index, pos ->
             val nearestStructure = labels.filter { it.text.contains("STRUCTURE", true) }
                 .minByOrNull { hypot(it.east - pos.east, it.north - pos.north) }
-            val nearestDepth = labels.filter { Regex("""(?i)h\\s*:\\s*[-+]?\\d+(?:\\.\\d+)?""").containsMatchIn(it.text) }
+            val nearestDepth = labels.filter { Regex("""(?i)h\s*:\s*[-+]?\d+(?:\.\d+)?""").containsMatchIn(it.text) }
                 .minByOrNull { hypot(it.east - pos.east, it.north - pos.north) }
-            val extractedId = nearestStructure?.text?.let { Regex("""\\(([^)]+)\\)""").find(it)?.groupValues?.getOrNull(1) }
-            val extractedDepth = nearestDepth?.text?.let { Regex("""(?i)h\\s*:\\s*([-+]?\\d+(?:\\.\\d+)?)""").find(it)?.groupValues?.getOrNull(1)?.toDoubleOrNull() } ?: 0.0
+            val extractedId = nearestStructure?.text?.let { Regex("""\(([^)]+)\)""").find(it)?.groupValues?.getOrNull(1) }
+            val extractedDepth = nearestDepth?.text?.let { Regex("""(?i)h\s*:\s*([-+]?\d+(?:\.\d+)?)""").find(it)?.groupValues?.getOrNull(1)?.toDoubleOrNull() } ?: 0.0
             Manhole(extractedId?.let { "MH-$it" } ?: "Manhole ${index + 1}", Offset.Zero, extractedDepth, 1.10, 1.10, pos.north, pos.east, pos.alt)
         }
         importedManholes.forEach { mh ->
@@ -372,7 +372,7 @@ private object DxfKmlImporter {
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ARKAN Sewer Network</name>$placemarks</Document></kml>"""
         return ImportResult(kml, "خطوط: $pipeCount | مناهيل: $mhCount", layerLengths, mhCount, importedManholes)
     }
-    private fun xmlEscape(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\\\"", "&quot;").replace("'", "&apos;")
+    private fun xmlEscape(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
     private fun fmt(v: Double) = String.format(Locale.US, "%.8f", v)
     private fun utmToWgs84(easting: Double, northing: Double, altitude: Double): GeoPoint {
         val a = 6378137.0
