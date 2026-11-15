@@ -52,6 +52,7 @@ private fun ArkanApp() {
     var status by remember { mutableStateOf("اختر أداة ثم المس مساحة الرسم.") }
     var showManholeDialog by remember { mutableStateOf(false) }
     var showKmlDialog by remember { mutableStateOf(false) }
+    var dxfFileName by remember { mutableStateOf("لم يتم اختيار DXF") }
     var longitude by remember { mutableStateOf("46.257") }
     var latitude by remember { mutableStateOf("31.057") }
     var mhId by remember { mutableStateOf("MH-01") }
@@ -67,6 +68,17 @@ private fun ArkanApp() {
     val totalExcavation = manholes.sumOf { it.excavation }
     val trenchVolume = totalLength * (trenchWidth.toDoubleOrNull() ?: 0.0) * (trenchDepth.toDoubleOrNull() ?: 0.0)
     val layerLengths = pipes.groupBy { it.layer }.mapValues { entry -> entry.value.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER } }
+
+    val dxfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val raw = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: error("تعذر قراءة الملف")
+                require(raw.contains("ENTITIES") && raw.contains("C-SSWR-CNTR") && raw.contains("C-SSWR-STRC")) { "طبقات المجاري المطلوبة غير موجودة" }
+                dxfFileName = uri.lastPathSegment ?: "DXF"
+                status = "تم التحقق من ملف DXF وطبقات المجاري. يجري تجهيز الاستخراج الجغرافي."
+            } catch (e: Exception) { status = "تعذر فتح DXF: " + e.message }
+        }
+    }
 
     val lispPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) { lispName = uri.lastPathSegment ?: "LSP file selected"; status = "تم اختيار ملف LISP. شغّله في AutoCAD المكتبي باستخدام APPLOAD." }
@@ -147,6 +159,7 @@ private fun ArkanApp() {
             Text("V1.4 • DXF workflow", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }) { Text("استيراد DXF") }
                 Button(onClick = { mode = "PIPE"; pipeStart = null }) { Text("رسم أنبوب") }
                 Button(onClick = { showManholeDialog = true }) { Text("إضافة منهول") }
             }
@@ -200,6 +213,7 @@ private fun ArkanApp() {
                 Button(onClick={showKmlDialog=true}) { Text("EXPORT KML") }
                 Button(onClick={pipes=emptyList();manholes=emptyList();pipeStart=null;pendingManhole=null;status="تم مسح الرسم."}) { Text("CLEAR") }
             }
+            Text("ملف DXF: $dxfFileName",color=Color.LightGray,fontSize=10.sp)
             Text("ملف LSP: $lispName",color=Color.LightGray,fontSize=10.sp)
             if(manholes.isNotEmpty()) {
                 Text("جدول المناهيل",color=Color.White,fontSize=14.sp)
