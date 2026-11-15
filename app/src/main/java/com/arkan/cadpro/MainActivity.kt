@@ -24,8 +24,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.math.hypot
 import kotlin.math.pow
 
@@ -119,6 +122,30 @@ private fun ArkanApp() {
             status = "تم تصدير جدول الكميات بصيغة CSV المتوافقة مع Excel."
         } catch (e: Exception) { status = "تعذر تصدير جدول Excel: ${e.message}" }
     }
+    val xlsxSaver = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    ) { uri: Uri? ->
+        if (uri != null) try {
+            val output = context.contentResolver.openOutputStream(uri) ?: error("تعذر فتح ملف الحفظ")
+            output.use {
+                ArkanXlsxWriter.write(
+                    it,
+                    effectivePipeLength,
+                    effectiveManholes.size,
+                    totalExcavation,
+                    trenchWidth.toDoubleOrNull() ?: 0.0,
+                    trenchDepth.toDoubleOrNull() ?: 0.0,
+                    trenchVolume,
+                    effectiveLayerLengths,
+                    effectiveManholes
+                )
+            }
+            status = "تم تصدير ملف Excel منسق بثلاث أوراق: الملخص، أطوال الأنابيب، والمناهيل."
+        } catch (e: Exception) {
+            status = "تعذر تصدير Excel: ${e.message}"
+        }
+    }
+
     val pdfSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri: Uri? ->
         if (uri != null) try {
             val document = PdfDocument()
@@ -220,7 +247,7 @@ private fun ArkanApp() {
             Text("حفر خنادق الأنابيب التقديري: %.2f م³".format(Locale.US,trenchVolume),color=Color(0xFF00C8A0),fontSize=12.sp)
             if (effectiveLayerLengths.isNotEmpty()) { Text("أطوال الأنابيب حسب Layer", color=Color.White, fontSize=13.sp); effectiveLayerLengths.forEach { (layer, length) -> Text("$"+"layer : %.2f م".format(Locale.US,length), color=Color(0xFFB8C7CE), fontSize=11.sp) } }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(onClick={csvSaver.launch("ARKAN_Quantities.csv")}) { Text("EXCEL / CSV") }
+                Button(onClick={xlsxSaver.launch("ARKAN_Quantity_Report.xlsx")}) { Text("EXCEL / XLSX") }
                 Button(onClick={pdfSaver.launch("ARKAN_Report.pdf")}) { Text("PDF") }
             }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -278,6 +305,218 @@ private fun ArkanApp() {
         confirmButton={TextButton(onClick={showKmlDialog=false;kmlSaver.launch(if (importedKml != null) "ARKAN_SEWER_NETWORK.kml" else "ARKAN_reference.kml")}) { Text("حفظ KML") }},
         dismissButton={TextButton(onClick={showKmlDialog=false}) { Text("إلغاء") }}
     )
+}
+
+
+private data class ArkanXlsxCell(
+    val text: String,
+    val number: Double? = null,
+    val style: Int = 0
+)
+
+private object ArkanXlsxWriter {
+    fun write(
+        output: OutputStream,
+        totalPipeLength: Double,
+        manholeCount: Int,
+        manholeExcavation: Double,
+        trenchWidth: Double,
+        trenchDepth: Double,
+        trenchExcavation: Double,
+        layerLengths: Map<String, Double>,
+        manholes: List<Manhole>
+    ) {
+        val summaryRows = mutableListOf<List<ArkanXlsxCell>>()
+        summaryRows += listOf(ArkanXlsxCell("ARKAN CAD PRO - تقرير الكميات", style = 1))
+        summaryRows += listOf(
+            ArkanXlsxCell("البيان", style = 2),
+            ArkanXlsxCell("القيمة", style = 2),
+            ArkanXlsxCell("الوحدة", style = 2)
+        )
+        fun summary(label: String, value: Double, unit: String) {
+            summaryRows += listOf(ArkanXlsxCell(label), ArkanXlsxCell("", value, 3), ArkanXlsxCell(unit))
+        }
+        summary("الطول الكلي للأنابيب", totalPipeLength, "م")
+        summary("عدد المناهيل", manholeCount.toDouble(), "منهول")
+        summary("حجم حفر المناهيل", manholeExcavation, "م³")
+        summary("عرض خندق الأنابيب", trenchWidth, "م")
+        summary("عمق خندق الأنابيب", trenchDepth, "م")
+        summary("حجم حفر خنادق الأنابيب", trenchExcavation, "م³")
+        summaryRows += listOf(ArkanXlsxCell("ملاحظة: أبعاد حفر المناهيل المستوردة افتراضية 1.10 × 1.10 م، والعمق مستخرج من DXF."))
+
+        val layerRows = mutableListOf<List<ArkanXlsxCell>>()
+        layerRows += listOf(ArkanXlsxCell("أطوال الأنابيب حسب الطبقة", style = 1))
+        layerRows += listOf(ArkanXlsxCell("اسم الطبقة", style = 2), ArkanXlsxCell("الطول (م)", style = 2))
+        layerLengths.toSortedMap().forEach { (layer, length) ->
+            layerRows += listOf(ArkanXlsxCell(layer), ArkanXlsxCell("", length, 3))
+        }
+        if (layerLengths.isEmpty()) {
+            layerRows += listOf(ArkanXlsxCell("لا توجد أطوال مسجلة"), ArkanXlsxCell("", 0.0, 3))
+        }
+
+        val manholeRows = mutableListOf<List<ArkanXlsxCell>>()
+        manholeRows += listOf(ArkanXlsxCell("جدول المناهيل", style = 1))
+        manholeRows += listOf(
+            ArkanXlsxCell("رقم المنهول", style = 2),
+            ArkanXlsxCell("التصنيف", style = 2),
+            ArkanXlsxCell("العمق (م)", style = 2),
+            ArkanXlsxCell("الطول (م)", style = 2),
+            ArkanXlsxCell("العرض (م)", style = 2),
+            ArkanXlsxCell("N / Northing", style = 2),
+            ArkanXlsxCell("E / Easting", style = 2),
+            ArkanXlsxCell("حجم الحفر (م³)", style = 2)
+        )
+        manholes.forEach { mh ->
+            manholeRows += listOf(
+                ArkanXlsxCell(mh.id),
+                ArkanXlsxCell(mh.type),
+                ArkanXlsxCell("", mh.depth, 3),
+                ArkanXlsxCell("", mh.length, 3),
+                ArkanXlsxCell("", mh.width, 3),
+                ArkanXlsxCell("", mh.northing, 3),
+                ArkanXlsxCell("", mh.easting, 3),
+                ArkanXlsxCell("", mh.excavation, 3)
+            )
+        }
+        manholeRows += listOf(
+            ArkanXlsxCell("المجموع"),
+            ArkanXlsxCell(""),
+            ArkanXlsxCell(""),
+            ArkanXlsxCell(""),
+            ArkanXlsxCell(""),
+            ArkanXlsxCell(""),
+            ArkanXlsxCell(""),
+            ArkanXlsxCell("", manholes.sumOf { it.excavation }, 3)
+        )
+
+        ZipOutputStream(output).use { zip ->
+            put(zip, "[Content_Types].xml", contentTypes())
+            put(zip, "_rels/.rels", rootRelationships())
+            put(zip, "xl/workbook.xml", workbook())
+            put(zip, "xl/_rels/workbook.xml.rels", workbookRelationships())
+            put(zip, "xl/styles.xml", styles())
+            put(zip, "xl/worksheets/sheet1.xml", sheet(summaryRows, listOf(38.0, 18.0, 14.0)))
+            put(zip, "xl/worksheets/sheet2.xml", sheet(layerRows, listOf(34.0, 20.0)))
+            put(zip, "xl/worksheets/sheet3.xml", sheet(manholeRows, listOf(18.0, 14.0, 15.0, 15.0, 15.0, 22.0, 22.0, 20.0)))
+            zip.finish()
+        }
+    }
+
+    private fun put(zip: ZipOutputStream, name: String, content: String) {
+        zip.putNextEntry(ZipEntry(name))
+        zip.write(content.toByteArray(Charsets.UTF_8))
+        zip.closeEntry()
+    }
+
+    private fun contentTypes() = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"""
+
+    private fun rootRelationships() = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+    private fun workbook() = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<bookViews><workbookView/></bookViews>
+<sheets>
+<sheet name="ملخص" sheetId="1" r:id="rId1"/>
+<sheet name="أطوال الأنابيب" sheetId="2" r:id="rId2"/>
+<sheet name="المناهيل" sheetId="3" r:id="rId3"/>
+</sheets>
+</workbook>"""
+
+    private fun workbookRelationships() = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>"""
+
+    private fun styles() = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.000"/></numFmts>
+<fonts count="3">
+<font><sz val="11"/><color rgb="FF202020"/><name val="Calibri"/></font>
+<font><b/><sz val="16"/><color rgb="FF087A67"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+</fonts>
+<fills count="4">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF00A98B"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFE6F5F1"/><bgColor indexed="64"/></patternFill></fill>
+</fills>
+<borders count="2">
+<border><left/><right/><top/><bottom/><diagonal/></border>
+<border><left style="thin"><color rgb="FFB7DCD3"/></left><right style="thin"><color rgb="FFB7DCD3"/></right><top style="thin"><color rgb="FFB7DCD3"/></top><bottom style="thin"><color rgb="FFB7DCD3"/></bottom><diagonal/></border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="4">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>
+<xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"><alignment horizontal="right"/></xf>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"""
+
+    private fun sheet(rows: List<List<ArkanXlsxCell>>, widths: List<Double>): String {
+        val maxColumns = maxOf(widths.size, rows.maxOfOrNull { it.size } ?: 1)
+        val maxColRef = columnName(maxColumns)
+        val rowXml = rows.mapIndexed { rowIndex, cells ->
+            val rowNumber = rowIndex + 1
+            val height = if (rowIndex == 0) """ ht="30" customHeight="1"""" else ""
+            val cellXml = cells.mapIndexed { colIndex, cell ->
+                val ref = columnName(colIndex + 1) + rowNumber
+                if (cell.number != null) {
+                    """<c r="$ref" s="${cell.style}"><v>${String.format(Locale.US, "%.3f", cell.number)}</v></c>"""
+                } else {
+                    val style = if (cell.style > 0) """ s="${cell.style}"""" else ""
+                    """<c r="$ref"$style t="inlineStr"><is><t xml:space="preserve">${escape(cell.text)}</t></is></c>"""
+                }
+            }.joinToString("")
+            """<row r="$rowNumber"$height>$cellXml</row>"""
+        }.joinToString("")
+        val colsXml = widths.mapIndexed { index, width ->
+            """<col min="${index + 1}" max="${index + 1}" width="${String.format(Locale.US, "%.1f", width)}" customWidth="1"/>"""
+        }.joinToString("")
+        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView workbookViewId="0" showGridLines="0" rightToLeft="1"/></sheetViews>
+<sheetFormatPr defaultRowHeight="22"/>
+<cols>$colsXml</cols>
+<sheetData>$rowXml</sheetData>
+<autoFilter ref="A2:${maxColRef}${rows.size}"/>
+</worksheet>"""
+    }
+
+    private fun columnName(index: Int): String {
+        var n = index
+        val result = StringBuilder()
+        while (n > 0) {
+            val rem = (n - 1) % 26
+            result.insert(0, ('A'.code + rem).toChar())
+            n = (n - 1) / 26
+        }
+        return result.toString()
+    }
+
+    private fun escape(value: String): String = value
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
 }
 
 
