@@ -81,7 +81,7 @@ private fun ArkanApp() {
             try {
                 val raw = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: error("تعذر قراءة الملف")
                 val converted = DxfKmlImporter.convert(raw)
-                importedKml = converted.first
+                importedKml = converted.kml
                 importedSummary = converted.summary
                 importedLayerLengths = converted.layerLengths
                 importedManholeCount = converted.manholeCount
