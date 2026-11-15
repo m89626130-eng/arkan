@@ -31,8 +31,8 @@ import kotlin.math.pow
 
 private const val PX_PER_METER = 40f
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
-private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double) {
-    val type: String get() = when { depth <= 1.70 -> "AS"; depth <= 3.00 -> "BS"; depth <= 4.00 -> "CD"; else -> "خارج التصنيف" }
+private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double, val altitude: Double = 0.0) {
+    val type: String get() = when { depth <= 0.0 -> "غير معروف"; depth <= 1.70 -> "AS"; depth <= 3.00 -> "BS"; depth <= 4.00 -> "CD"; else -> "خارج التصنيف" }
     val excavation: Double get() = length * width * depth
 }
 
@@ -58,6 +58,7 @@ private fun ArkanApp() {
     var importedSummary by remember { mutableStateOf("") }
     var importedLayerLengths by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var importedManholeCount by remember { mutableStateOf(0) }
+    var importedManholes by remember { mutableStateOf(listOf<Manhole>()) }
     var longitude by remember { mutableStateOf("46.257") }
     var latitude by remember { mutableStateOf("31.057") }
     var mhId by remember { mutableStateOf("MH-01") }
@@ -70,7 +71,8 @@ private fun ArkanApp() {
     val context = LocalContext.current
 
     val totalLength = pipes.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER }
-    val totalExcavation = manholes.sumOf { it.excavation }
+    val effectiveManholes = if (importedKml != null) importedManholes else manholes
+    val totalExcavation = effectiveManholes.sumOf { it.excavation }
     val layerLengths = pipes.groupBy { it.layer }.mapValues { entry -> entry.value.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER } }
     val effectiveLayerLengths = if (importedKml != null) importedLayerLengths else layerLengths
     val effectivePipeLength = if (importedKml != null) effectiveLayerLengths.values.sum() else totalLength
@@ -85,6 +87,7 @@ private fun ArkanApp() {
                 importedSummary = converted.summary
                 importedLayerLengths = converted.layerLengths
                 importedManholeCount = converted.manholeCount
+                importedManholes = converted.manholes
                 dxfFileName = uri.lastPathSegment ?: "DXF"
                 status = "تم استيراد هندسة DXF: $importedSummary. نظام الإحداثيات المفترض WGS84 / UTM 38N."
             } catch (e: Exception) { status = "تعذر فتح DXF: " + e.message }
@@ -101,7 +104,7 @@ private fun ArkanApp() {
             rows.add("ARKAN CAD PRO - Quantity Report")
             rows.add("Item,Value,Unit")
             rows.add("Total pipe length,${String.format(Locale.US,"%.2f",effectivePipeLength)},m")
-            rows.add("Manholes count,${if (importedKml != null) importedManholeCount else manholes.size},count")
+            rows.add("Manholes count,${effectiveManholes.size},count")
             rows.add("Manhole excavation,${String.format(Locale.US,"%.2f",totalExcavation)},m3")
             rows.add("Trench width,$trenchWidth,m")
             rows.add("Trench depth,$trenchDepth,m")
@@ -111,7 +114,7 @@ private fun ArkanApp() {
             effectiveLayerLengths.forEach { (layer,length) -> rows.add("$layer,${String.format(Locale.US,"%.2f",length)},m") }
             rows.add("")
             rows.add("Manhole ID,Type,Depth m,Length m,Width m,N,E,Excavation m3")
-            manholes.forEach { mh -> rows.add("${mh.id},${mh.type},${mh.depth},${mh.length},${mh.width},${mh.northing},${mh.easting},${String.format(Locale.US,"%.2f",mh.excavation)}") }
+            effectiveManholes.forEach { mh -> rows.add("${mh.id},${mh.type},${mh.depth},${mh.length},${mh.width},${mh.northing},${mh.easting},${String.format(Locale.US,"%.2f",mh.excavation)}") }
             context.contentResolver.openOutputStream(uri)?.use { it.write(("\uFEFF" + rows.joinToString("\r\n")).toByteArray(Charsets.UTF_8)) }
             status = "تم تصدير جدول الكميات بصيغة CSV المتوافقة مع Excel."
         } catch (e: Exception) { status = "تعذر تصدير جدول Excel: ${e.message}" }
@@ -123,7 +126,7 @@ private fun ArkanApp() {
             val lines = mutableListOf<String>()
             lines.add("ARKAN CAD PRO - Quantity Report")
             lines.add("Total pipe length: %.2f m".format(Locale.US,effectivePipeLength))
-            lines.add("Manholes count: ${if (importedKml != null) importedManholeCount else manholes.size}")
+            lines.add("Manholes count: ${effectiveManholes.size}")
             lines.add("Manhole excavation: %.2f m3".format(Locale.US,totalExcavation))
             lines.add("Trench width: $trenchWidth m")
             lines.add("Trench depth: $trenchDepth m")
@@ -133,7 +136,7 @@ private fun ArkanApp() {
             effectiveLayerLengths.forEach { (layer,length) -> lines.add("$layer : %.2f m".format(Locale.US,length)) }
             lines.add("")
             lines.add("Manholes: ID | Type | Depth | Length | Width | N | E | Excavation")
-            manholes.forEach { mh -> lines.add("${mh.id} | ${mh.type} | ${mh.depth} | ${mh.length} | ${mh.width} | ${mh.northing} | ${mh.easting} | %.2f".format(Locale.US,mh.excavation)) }
+            effectiveManholes.forEach { mh -> lines.add("${mh.id} | ${mh.type} | ${mh.depth} | ${mh.length} | ${mh.width} | ${mh.northing} | ${mh.easting} | %.2f".format(Locale.US,mh.excavation)) }
             var pageNumber = 1
             var page = document.startPage(PdfDocument.PageInfo.Builder(595,842,pageNumber).create())
             var y = 48f
@@ -227,10 +230,11 @@ private fun ArkanApp() {
             Text("ملف DXF: $dxfFileName",color=Color.LightGray,fontSize=10.sp)
             if (importedSummary.isNotBlank()) Text("العناصر المستوردة: $importedSummary",color=Color(0xFF00C8A0),fontSize=10.sp)
             Text("ملف LSP: $lispName",color=Color.LightGray,fontSize=10.sp)
-            if(manholes.isNotEmpty()) {
+            if(effectiveManholes.isNotEmpty()) {
                 Text("جدول المناهيل",color=Color.White,fontSize=14.sp)
-                Column(Modifier.heightIn(max=110.dp).verticalScroll(rememberScrollState())) {
-                    manholes.forEach { mh -> Text("${mh.id} | ${mh.type} | عمق ${mh.depth}م | N ${mh.northing} | E ${mh.easting} | حفر %.2fم³".format(Locale.US,mh.excavation),color=Color(0xFFB8C7CE),fontSize=11.sp) }
+                if (importedKml != null) Text("أبعاد الحفر الافتراضية للمناهيل المستوردة: 1.10 × 1.10 م؛ العمق من نص h في DXF.",color=Color.LightGray,fontSize=10.sp)
+                Column(Modifier.heightIn(max=150.dp).verticalScroll(rememberScrollState())) {
+                    effectiveManholes.forEach { mh -> Text("${mh.id} | ${mh.type} | عمق ${mh.depth}م | N ${mh.northing} | E ${mh.easting} | حفر %.2fم³".format(Locale.US,mh.excavation),color=Color(0xFFB8C7CE),fontSize=11.sp) }
                 }
             }
         }
@@ -278,9 +282,11 @@ private fun ArkanApp() {
 
 
 private object DxfKmlImporter {
-    data class ImportResult(val kml: String, val summary: String, val layerLengths: Map<String, Double>, val manholeCount: Int)
+    data class ImportResult(val kml: String, val summary: String, val layerLengths: Map<String, Double>, val manholeCount: Int, val manholes: List<Manhole>)
     private data class PairCode(val code: Int, val value: String)
     private data class GeoPoint(val lon: Double, val lat: Double, val alt: Double)
+    private data class DxfPosition(val east: Double, val north: Double, val alt: Double)
+    private data class DxfLabel(val east: Double, val north: Double, val text: String)
     fun convert(raw: String): ImportResult {
         val lines = raw.replace("\r", "").lines()
         val pairs = mutableListOf<PairCode>()
@@ -304,19 +310,41 @@ private object DxfKmlImporter {
         if (current.isNotEmpty() && current.firstOrNull()?.value != "ENDSEC") entities.add(current)
         val placemarks = StringBuilder()
         var pipeCount = 0
-        var mhCount = 0
         val layerLengths = mutableMapOf<String, Double>()
+        val structurePositions = entities.filter { it.firstOrNull()?.value == "INSERT" && it.firstOrNull { p -> p.code == 8 }?.value == "C-SSWR-STRC" }.mapNotNull { e ->
+            val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
+            val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
+            val alt = e.firstOrNull { it.code == 30 }?.value?.toDoubleOrNull() ?: 0.0
+            DxfPosition(east, north, alt)
+        }
+        val labels = entities.filter { e ->
+            val type = e.firstOrNull()?.value
+            (type == "TEXT" || type == "MTEXT") && e.firstOrNull { it.code == 8 }?.value == "C-STRM-TEXT"
+        }.mapNotNull { e ->
+            val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
+            val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
+            val labelText = e.firstOrNull { it.code == 1 }?.value ?: e.firstOrNull { it.code == 3 }?.value ?: return@mapNotNull null
+            DxfLabel(east, north, labelText)
+        }
+        val importedManholes = structurePositions.mapIndexed { index, pos ->
+            val nearestStructure = labels.filter { it.text.contains("STRUCTURE", true) }
+                .minByOrNull { hypot(it.east - pos.east, it.north - pos.north) }
+            val nearestDepth = labels.filter { Regex("""(?i)h\\s*:\\s*[-+]?\\d+(?:\\.\\d+)?""").containsMatchIn(it.text) }
+                .minByOrNull { hypot(it.east - pos.east, it.north - pos.north) }
+            val extractedId = nearestStructure?.text?.let { Regex("""\\(([^)]+)\\)""").find(it)?.groupValues?.getOrNull(1) }
+            val extractedDepth = nearestDepth?.text?.let { Regex("""(?i)h\\s*:\\s*([-+]?\\d+(?:\\.\\d+)?)""").find(it)?.groupValues?.getOrNull(1)?.toDoubleOrNull() } ?: 0.0
+            Manhole(extractedId?.let { "MH-$it" } ?: "Manhole ${index + 1}", Offset.Zero, extractedDepth, 1.10, 1.10, pos.north, pos.east, pos.alt)
+        }
+        importedManholes.forEach { mh ->
+            val geo = utmToWgs84(mh.easting, mh.northing, mh.altitude)
+            val safeName = xmlEscape(mh.id)
+            placemarks.append("<Placemark><name>$safeName</name><Point><coordinates>${fmt(geo.lon)},${fmt(geo.lat)},${fmt(geo.alt)}</coordinates></Point></Placemark>")
+        }
+        val mhCount = importedManholes.size
         for (e in entities) {
             val type = e.firstOrNull()?.value ?: continue
             val layer = e.firstOrNull { it.code == 8 }?.value ?: ""
-            if (type == "INSERT" && layer == "C-SSWR-STRC") {
-                val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: continue
-                val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: continue
-                val alt = e.firstOrNull { it.code == 30 }?.value?.toDoubleOrNull() ?: 0.0
-                val geo = utmToWgs84(east, north, alt)
-                mhCount++
-                placemarks.append("<Placemark><name>Manhole $mhCount</name><Point><coordinates>${fmt(geo.lon)},${fmt(geo.lat)},${fmt(geo.alt)}</coordinates></Point></Placemark>")
-            } else if (type == "LWPOLYLINE" && layer == "C-SSWR-CNTR") {
+            if (type == "LWPOLYLINE" && layer == "C-SSWR-CNTR") {
                 val pts = mutableListOf<Pair<Double, Double>>()
                 var x: Double? = null
                 for (p in e.drop(1)) {
@@ -342,8 +370,9 @@ private object DxfKmlImporter {
         require(pipeCount > 0 || mhCount > 0) { "لم يتم العثور على خطوط أو مناهيل في الطبقات المحددة" }
         val kml = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ARKAN Sewer Network</name>$placemarks</Document></kml>"""
-        return ImportResult(kml, "خطوط: $pipeCount | مناهيل: $mhCount", layerLengths, mhCount)
+        return ImportResult(kml, "خطوط: $pipeCount | مناهيل: $mhCount", layerLengths, mhCount, importedManholes)
     }
+    private fun xmlEscape(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\\\"", "&quot;").replace("'", "&apos;")
     private fun fmt(v: Double) = String.format(Locale.US, "%.8f", v)
     private fun utmToWgs84(easting: Double, northing: Double, altitude: Double): GeoPoint {
         val a = 6378137.0
