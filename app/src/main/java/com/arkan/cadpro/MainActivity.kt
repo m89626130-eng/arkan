@@ -53,6 +53,8 @@ private fun ArkanApp() {
     var showManholeDialog by remember { mutableStateOf(false) }
     var showKmlDialog by remember { mutableStateOf(false) }
     var dxfFileName by remember { mutableStateOf("لم يتم اختيار DXF") }
+    var importedKml by remember { mutableStateOf<String?>(null) }
+    var importedSummary by remember { mutableStateOf("") }
     var longitude by remember { mutableStateOf("46.257") }
     var latitude by remember { mutableStateOf("31.057") }
     var mhId by remember { mutableStateOf("MH-01") }
@@ -73,9 +75,11 @@ private fun ArkanApp() {
         if (uri != null) {
             try {
                 val raw = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: error("تعذر قراءة الملف")
-                require(raw.contains("ENTITIES") && raw.contains("C-SSWR-CNTR") && raw.contains("C-SSWR-STRC")) { "طبقات المجاري المطلوبة غير موجودة" }
+                val converted = DxfKmlImporter.convert(raw)
+                importedKml = converted.first
+                importedSummary = converted.second
                 dxfFileName = uri.lastPathSegment ?: "DXF"
-                status = "تم التحقق من ملف DXF وطبقات المجاري. يجري تجهيز الاستخراج الجغرافي."
+                status = "تم استيراد هندسة DXF: $importedSummary. نظام الإحداثيات المفترض WGS84 / UTM 38N."
             } catch (e: Exception) { status = "تعذر فتح DXF: " + e.message }
         }
     }
@@ -147,8 +151,8 @@ private fun ArkanApp() {
         if (uri != null) try {
             val lon = longitude.toDouble(); val lat = latitude.toDouble()
             require(lon in -180.0..180.0 && lat in -90.0..90.0)
-            context.contentResolver.openOutputStream(uri)?.use { OutputStreamWriter(it, Charsets.UTF_8).use { writer -> writer.write(KmlPointWriter.point("ARKAN reference point", lon, lat)) } }
-            status = "تم حفظ نقطة KML المرجعية. الرسم المحلي لم يُحوّل إلى WGS84."
+            context.contentResolver.openOutputStream(uri)?.use { OutputStreamWriter(it, Charsets.UTF_8).use { writer -> writer.write(importedKml ?: KmlPointWriter.point("ARKAN reference point", lon, lat)) } }
+            status = if (importedKml != null) "تم تصدير شبكة المجاري المستوردة إلى KML." else "تم حفظ نقطة KML المرجعية."
         } catch (_: Exception) { status = "إحداثيات WGS84 غير صحيحة." }
     }
 
@@ -214,6 +218,7 @@ private fun ArkanApp() {
                 Button(onClick={pipes=emptyList();manholes=emptyList();pipeStart=null;pendingManhole=null;status="تم مسح الرسم."}) { Text("CLEAR") }
             }
             Text("ملف DXF: $dxfFileName",color=Color.LightGray,fontSize=10.sp)
+            if (importedSummary.isNotBlank()) Text("العناصر المستوردة: $importedSummary",color=Color(0xFF00C8A0),fontSize=10.sp)
             Text("ملف LSP: $lispName",color=Color.LightGray,fontSize=10.sp)
             if(manholes.isNotEmpty()) {
                 Text("جدول المناهيل",color=Color.White,fontSize=14.sp)
@@ -250,15 +255,117 @@ private fun ArkanApp() {
     )
 
     if(showKmlDialog) AlertDialog(
-        onDismissRequest={showKmlDialog=false},title={Text("نقطة مرجعية KML / WGS84")},
+        onDismissRequest={showKmlDialog=false},title={Text(if (importedKml != null) "تصدير شبكة المجاري KML" else "نقطة مرجعية KML / WGS84")},
         text={Column {
-            OutlinedTextField(longitude,{longitude=it},label={Text("Longitude")})
-            OutlinedTextField(latitude,{latitude=it},label={Text("Latitude")})
-            Text("حالياً يصدر التطبيق نقطة مرجعية فقط. لا تدخل N/E هنا؛ تحويل UTM سيضاف بعد تحديد المنطقة ونظام الإحداثيات.")
+            if (importedKml != null) Text("سيتم تصدير خطوط الأنابيب والمناهيل من ملف DXF إلى KML. $importedSummary\nالتحويل يفترض WGS84 / UTM Zone 38N.")
+            else {
+                OutlinedTextField(longitude,{longitude=it},label={Text("Longitude")})
+                OutlinedTextField(latitude,{latitude=it},label={Text("Latitude")})
+                Text("أدخل إحداثيات WGS84 لنقطة مرجعية.")
+            }
         }},
-        confirmButton={TextButton(onClick={showKmlDialog=false;kmlSaver.launch("ARKAN_reference.kml")}) { Text("حفظ KML") }},
+        confirmButton={TextButton(onClick={showKmlDialog=false;kmlSaver.launch(if (importedKml != null) "ARKAN_SEWER_NETWORK.kml" else "ARKAN_reference.kml")}) { Text("حفظ KML") }},
         dismissButton={TextButton(onClick={showKmlDialog=false}) { Text("إلغاء") }}
     )
+}
+
+
+private object DxfKmlImporter {
+    private data class PairCode(val code: Int, val value: String)
+    private data class GeoPoint(val lon: Double, val lat: Double, val alt: Double)
+    fun convert(raw: String): Pair<String, String> {
+        val lines = raw.replace("\r", "").lines()
+        val pairs = mutableListOf<PairCode>()
+        var i = 0
+        while (i + 1 < lines.size) {
+            val code = lines[i].trim().toIntOrNull()
+            if (code != null) pairs.add(PairCode(code, lines[i + 1].trim()))
+            i += 2
+        }
+        val start = pairs.indexOfFirst { it.code == 2 && it.value.equals("ENTITIES", true) }
+        require(start >= 0) { "قسم ENTITIES غير موجود" }
+        val entities = mutableListOf<List<PairCode>>()
+        var current = mutableListOf<PairCode>()
+        for (p in pairs.drop(start + 1)) {
+            if (p.code == 0) {
+                if (current.isNotEmpty()) entities.add(current)
+                current = mutableListOf(p)
+                if (p.value == "ENDSEC") break
+            } else current.add(p)
+        }
+        if (current.isNotEmpty() && current.firstOrNull()?.value != "ENDSEC") entities.add(current)
+        val placemarks = StringBuilder()
+        var pipeCount = 0
+        var mhCount = 0
+        for (e in entities) {
+            val type = e.firstOrNull()?.value ?: continue
+            val layer = e.firstOrNull { it.code == 8 }?.value ?: ""
+            if (type == "INSERT" && layer == "C-SSWR-STRC") {
+                val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: continue
+                val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: continue
+                val alt = e.firstOrNull { it.code == 30 }?.value?.toDoubleOrNull() ?: 0.0
+                val geo = utmToWgs84(east, north, alt)
+                mhCount++
+                placemarks.append("<Placemark><name>Manhole $mhCount</name><Point><coordinates>${fmt(geo.lon)},${fmt(geo.lat)},${fmt(geo.alt)}</coordinates></Point></Placemark>")
+            } else if (type == "LWPOLYLINE" && layer == "C-SSWR-CNTR") {
+                val pts = mutableListOf<Pair<Double, Double>>()
+                var x: Double? = null
+                for (p in e.drop(1)) {
+                    if (p.code == 10) x = p.value.toDoubleOrNull()
+                    if (p.code == 20 && x != null) {
+                        val y = p.value.toDoubleOrNull()
+                        if (y != null) pts.add(x!! to y)
+                        x = null
+                    }
+                }
+                if (pts.size >= 2) {
+                    val coords = pts.joinToString(" ") { (east, north) ->
+                        val g = utmToWgs84(east, north, 0.0)
+                        "${fmt(g.lon)},${fmt(g.lat)},${fmt(g.alt)}"
+                    }
+                    pipeCount++
+                    placemarks.append("<Placemark><name>Sewer pipe $pipeCount</name><Style><LineStyle><color>ff00ffff</color><width>3</width></LineStyle></Style><LineString><tessellate>1</tessellate><coordinates>$coords</coordinates></LineString></Placemark>")
+                }
+            }
+        }
+        require(pipeCount > 0 || mhCount > 0) { "لم يتم العثور على خطوط أو مناهيل في الطبقات المحددة" }
+        val kml = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ARKAN Sewer Network</name>$placemarks</Document></kml>"""
+        return kml to "خطوط: $pipeCount | مناهيل: $mhCount"
+    }
+    private fun fmt(v: Double) = String.format(Locale.US, "%.8f", v)
+    private fun utmToWgs84(easting: Double, northing: Double, altitude: Double): GeoPoint {
+        val a = 6378137.0
+        val ecc = 0.00669438
+        val k0 = 0.9996
+        val x = easting - 500000.0
+        val y = northing
+        val m = y / k0
+        val mu = m / (a * (1 - ecc / 4 - 3 * ecc * ecc / 64 - 5 * ecc * ecc * ecc / 256))
+        val e1 = (1 - kotlin.math.sqrt(1 - ecc)) / (1 + kotlin.math.sqrt(1 - ecc))
+        val j1 = 3 * e1 / 2 - 27 * e1.pow(3) / 32
+        val j2 = 21 * e1 * e1 / 16 - 55 * e1.pow(4) / 32
+        val j3 = 151 * e1.pow(3) / 96
+        val j4 = 1097 * e1.pow(4) / 512
+        val fp = mu + j1 * kotlin.math.sin(2 * mu) + j2 * kotlin.math.sin(4 * mu) + j3 * kotlin.math.sin(6 * mu) + j4 * kotlin.math.sin(8 * mu)
+        val ep2 = ecc / (1 - ecc)
+        val c1 = ep2 * kotlin.math.cos(fp).pow(2)
+        val t1 = kotlin.math.tan(fp).pow(2)
+        val n1 = a / kotlin.math.sqrt(1 - ecc * kotlin.math.sin(fp).pow(2))
+        val r1 = a * (1 - ecc) / (1 - ecc * kotlin.math.sin(fp).pow(2)).pow(1.5)
+        val d = x / (n1 * k0)
+        val q1 = n1 * kotlin.math.tan(fp) / r1
+        val q2 = d * d / 2
+        val q3 = (5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * ep2) * d.pow(4) / 24
+        val q4 = (61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * ep2 - 3 * c1 * c1) * d.pow(6) / 720
+        val lat = fp - q1 * (q2 - q3 + q4)
+        val q5 = d
+        val q6 = (1 + 2 * t1 + c1) * d.pow(3) / 6
+        val q7 = (5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * ep2 + 24 * t1 * t1) * d.pow(5) / 120
+        val lon = Math.toRadians(45.0) + (q5 - q6 + q7) / kotlin.math.cos(fp)
+        return GeoPoint(Math.toDegrees(lon), Math.toDegrees(lat), altitude)
+    }
+    private fun Double.pow(n: Int): Double = kotlin.math.pow(this, n.toDouble())
 }
 
 private object KmlPointWriter {
