@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import java.io.OutputStreamWriter
 import java.util.Locale
 import kotlin.math.hypot
+import kotlin.math.pow
 
 private const val PX_PER_METER = 40f
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
@@ -365,7 +366,7 @@ private object DxfKmlImporter {
         val lon = Math.toRadians(45.0) + (q5 - q6 + q7) / kotlin.math.cos(fp)
         return GeoPoint(Math.toDegrees(lon), Math.toDegrees(lat), altitude)
     }
-    private fun Double.pow(n: Int): Double = kotlin.math.pow(this, n.toDouble())
+    private fun Double.pow(n: Int): Double = this.pow(n.toDouble())
 }
 
 private object KmlPointWriter {
