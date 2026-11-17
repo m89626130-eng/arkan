@@ -62,6 +62,8 @@ private fun ArkanApp() {
     var importedLayerLengths by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var importedManholeCount by remember { mutableStateOf(0) }
     var importedManholes by remember { mutableStateOf(listOf<Manhole>()) }
+    var importedDiameterLengths by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
+    var importedUnclassifiedGeometryLength by remember { mutableStateOf(0.0) }
     var longitude by remember { mutableStateOf("46.257") }
     var latitude by remember { mutableStateOf("31.057") }
     var mhId by remember { mutableStateOf("MH-01") }
@@ -79,6 +81,11 @@ private fun ArkanApp() {
     val layerLengths = pipes.groupBy { it.layer }.mapValues { entry -> entry.value.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER } }
     val effectiveLayerLengths = if (importedKml != null) importedLayerLengths else layerLengths
     val effectivePipeLength = if (importedKml != null) effectiveLayerLengths.values.sum() else totalLength
+    val effectiveDiameterLengths = if (importedKml != null) importedDiameterLengths else emptyMap()
+    val standardPipeDiameters = listOf(250, 315, 400, 500, 600, 700)
+    val displayedPipeDiameters = (standardPipeDiameters + effectiveDiameterLengths.keys).distinct().sorted()
+    val importedDiameterLabelTotal = effectiveDiameterLengths.values.sum()
+    val diameterUnclassifiedLength = importedUnclassifiedGeometryLength
     val trenchVolume = effectivePipeLength * (trenchWidth.toDoubleOrNull() ?: 0.0) * (trenchDepth.toDoubleOrNull() ?: 0.0)
 
     val dxfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -91,6 +98,8 @@ private fun ArkanApp() {
                 importedLayerLengths = converted.layerLengths
                 importedManholeCount = converted.manholeCount
                 importedManholes = converted.manholes
+                importedDiameterLengths = converted.diameterLengths
+                importedUnclassifiedGeometryLength = converted.unclassifiedGeometryLength
                 dxfFileName = uri.lastPathSegment ?: "DXF"
                 status = "تم استيراد هندسة DXF: $importedSummary. نظام الإحداثيات المفترض WGS84 / UTM 38N."
             } catch (e: Exception) { status = "تعذر فتح DXF: " + e.message }
@@ -112,6 +121,13 @@ private fun ArkanApp() {
             rows.add("Trench width,$trenchWidth,m")
             rows.add("Trench depth,$trenchDepth,m")
             rows.add("Estimated pipe trench excavation,${String.format(Locale.US,"%.2f",trenchVolume)},m3")
+            rows.add("")
+            rows.add("Pipe lengths by Diameter (mm),Length (m),Source")
+            displayedPipeDiameters.forEach { diameter ->
+                val length = effectiveDiameterLengths[diameter] ?: 0.0
+                rows.add("$diameter,${String.format(Locale.US,"%.2f",length)},${if (length > 0.0) "DXF label" else "Not labelled in drawing"}")
+            }
+            if (importedKml != null) rows.add("Unclassified centerline geometry,${String.format(Locale.US,"%.2f",diameterUnclassifiedLength)},m")
             rows.add("")
             rows.add("Pipe lengths by Layer,,")
             effectiveLayerLengths.forEach { (layer,length) -> rows.add("$layer,${String.format(Locale.US,"%.2f",length)},m") }
@@ -137,6 +153,8 @@ private fun ArkanApp() {
                     trenchDepth.toDoubleOrNull() ?: 0.0,
                     trenchVolume,
                     effectiveLayerLengths,
+                    effectiveDiameterLengths,
+                    diameterUnclassifiedLength,
                     effectiveManholes
                 )
             }
@@ -159,7 +177,13 @@ private fun ArkanApp() {
             lines.add("Trench depth: $trenchDepth m")
             lines.add("Estimated pipe trench excavation: %.2f m3".format(Locale.US,trenchVolume))
             lines.add("")
-            lines.add("Pipe lengths by Layer:")
+            lines.add("Pipe lengths by diameter (values explicitly labelled in DXF):")
+            displayedPipeDiameters.forEach { diameter ->
+                val length = effectiveDiameterLengths[diameter] ?: 0.0
+                lines.add("$diameter mm : %.2f m".format(Locale.US,length))
+            }
+            if (importedKml != null) lines.add("Unclassified centerline geometry : %.2f m".format(Locale.US,diameterUnclassifiedLength))
+            lines.add("Geometric centerline by DXF layer:")
             effectiveLayerLengths.forEach { (layer,length) -> lines.add("$layer : %.2f m".format(Locale.US,length)) }
             lines.add("")
             lines.add("Manholes: ID | Type | Depth | Length | Width | N | E | Excavation")
@@ -245,7 +269,26 @@ private fun ArkanApp() {
             Text("كل مربع = 1 متر (مقياس تجريبي) • $status", color=Color.White,fontSize=11.sp)
             Text("طول الأنابيب: %.2f م | المناهيل: %d | حفر المناهيل: %.2f م³".format(Locale.US,effectivePipeLength,if (importedKml != null) importedManholeCount else manholes.size,totalExcavation),color=Color(0xFF00C8A0),fontSize=12.sp)
             Text("حفر خنادق الأنابيب التقديري: %.2f م³".format(Locale.US,trenchVolume),color=Color(0xFF00C8A0),fontSize=12.sp)
-            if (effectiveLayerLengths.isNotEmpty()) { Text("أطوال الأنابيب حسب Layer", color=Color.White, fontSize=13.sp); effectiveLayerLengths.forEach { (layer, length) -> Text("$"+"layer : %.2f م".format(Locale.US,length), color=Color(0xFFB8C7CE), fontSize=11.sp) } }
+            if (importedKml != null) {
+                Text("أطوال الأنابيب حسب القطر الفعلي من وسوم DXF", color=Color.White, fontSize=13.sp)
+                displayedPipeDiameters.forEach { diameter ->
+                    val length = effectiveDiameterLengths[diameter] ?: 0.0
+                    val sourceNote = if (length > 0.0) "" else " (لا يوجد وسم بهذا القطر)"
+                    Text("$diameter مم : %.2f م%s".format(Locale.US,length,sourceNote), color=Color(0xFFB8C7CE), fontSize=11.sp)
+                }
+                Text(
+                    if (diameterUnclassifiedLength >= 0.0)
+                        "طول هندسة غير مربوط بقطر: %.2f م".format(Locale.US,diameterUnclassifiedLength)
+                    else
+                        "فرق الوسوم عن الهندسة: %.2f م".format(Locale.US,-diameterUnclassifiedLength),
+                    color=Color(0xFFFFC857), fontSize=11.sp
+                )
+                Text("الطول الهندسي حسب طبقة DXF:", color=Color.White, fontSize=11.sp)
+                effectiveLayerLengths.forEach { (layer, length) -> Text("$layer : %.2f م".format(Locale.US,length), color=Color(0xFFB8C7CE), fontSize=10.sp) }
+            } else if (effectiveLayerLengths.isNotEmpty()) {
+                Text("أطوال الأنابيب حسب Layer", color=Color.White, fontSize=13.sp)
+                effectiveLayerLengths.forEach { (layer, length) -> Text("$layer : %.2f م".format(Locale.US,length), color=Color(0xFFB8C7CE), fontSize=11.sp) }
+            }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 Button(onClick={xlsxSaver.launch("ARKAN_Quantity_Report.xlsx")}) { Text("EXCEL / XLSX") }
                 Button(onClick={pdfSaver.launch("ARKAN_Report.pdf")}) { Text("PDF") }
@@ -324,6 +367,8 @@ private object ArkanXlsxWriter {
         trenchDepth: Double,
         trenchExcavation: Double,
         layerLengths: Map<String, Double>,
+        diameterLengths: Map<Int, Double>,
+        unclassifiedGeometryLength: Double,
         manholes: List<Manhole>
     ) {
         val summaryRows = mutableListOf<List<ArkanXlsxCell>>()
@@ -345,13 +390,40 @@ private object ArkanXlsxWriter {
         summaryRows += listOf(ArkanXlsxCell("ملاحظة: أبعاد حفر المناهيل المستوردة افتراضية 1.10 × 1.10 م، والعمق مستخرج من DXF."))
 
         val layerRows = mutableListOf<List<ArkanXlsxCell>>()
-        layerRows += listOf(ArkanXlsxCell("أطوال الأنابيب حسب الطبقة", style = 1))
-        layerRows += listOf(ArkanXlsxCell("اسم الطبقة", style = 2), ArkanXlsxCell("الطول (م)", style = 2))
+        layerRows += listOf(ArkanXlsxCell("أطوال الأنابيب حسب القطر الفعلي", style = 1))
+        layerRows += listOf(
+            ArkanXlsxCell("القطر (مم)", style = 2),
+            ArkanXlsxCell("الطول المعلن (م)", style = 2),
+            ArkanXlsxCell("مصدر البيانات", style = 2)
+        )
+        val standardDiameters = listOf(250, 315, 400, 500, 600, 700)
+        val shownDiameters = (standardDiameters + diameterLengths.keys).distinct().sorted()
+        shownDiameters.forEach { diameter ->
+            val value = diameterLengths[diameter]
+            layerRows += listOf(
+                ArkanXlsxCell(diameter.toString()),
+                ArkanXlsxCell("", value ?: 0.0, 3),
+                ArkanXlsxCell(if (value != null && value > 0.0) "مذكور صراحة في DXF" else "لا يوجد وسم بهذا القطر")
+            )
+        }
+        layerRows += listOf(
+            ArkanXlsxCell(if (unclassifiedGeometryLength >= 0.0) "هندسة مسارات غير مرتبطة بقطر" else "فرق: الوسوم أكبر من طول الهندسة"),
+            ArkanXlsxCell("", kotlin.math.abs(unclassifiedGeometryLength), 3),
+            ArkanXlsxCell("فرق حسابي بين الهندسة ووسوم الأطوال")
+        )
+        layerRows += listOf(
+            ArkanXlsxCell("مجموع الأطوال المعلنة حسب القطر"),
+            ArkanXlsxCell("", diameterLengths.values.sum(), 3),
+            ArkanXlsxCell("من أبعاد وأطوال النصوص في DXF")
+        )
+        layerRows += listOf(ArkanXlsxCell(""))
+        layerRows += listOf(ArkanXlsxCell("أطوال هندسة المسارات حسب Layer", style = 1))
+        layerRows += listOf(ArkanXlsxCell("اسم الطبقة", style = 2), ArkanXlsxCell("الطول الهندسي (م)", style = 2))
         layerLengths.toSortedMap().forEach { (layer, length) ->
             layerRows += listOf(ArkanXlsxCell(layer), ArkanXlsxCell("", length, 3))
         }
         if (layerLengths.isEmpty()) {
-            layerRows += listOf(ArkanXlsxCell("لا توجد أطوال مسجلة"), ArkanXlsxCell("", 0.0, 3))
+            layerRows += listOf(ArkanXlsxCell("لا توجد أطوال هندسية"), ArkanXlsxCell("", 0.0, 3))
         }
 
         val manholeRows = mutableListOf<List<ArkanXlsxCell>>()
@@ -396,7 +468,7 @@ private object ArkanXlsxWriter {
             put(zip, "xl/_rels/workbook.xml.rels", workbookRelationships())
             put(zip, "xl/styles.xml", styles())
             put(zip, "xl/worksheets/sheet1.xml", sheet(summaryRows, listOf(38.0, 18.0, 14.0)))
-            put(zip, "xl/worksheets/sheet2.xml", sheet(layerRows, listOf(34.0, 20.0)))
+            put(zip, "xl/worksheets/sheet2.xml", sheet(layerRows, listOf(34.0, 22.0, 34.0)))
             put(zip, "xl/worksheets/sheet3.xml", sheet(manholeRows, listOf(18.0, 14.0, 15.0, 15.0, 15.0, 22.0, 22.0, 20.0)))
             zip.finish()
         }
@@ -521,7 +593,15 @@ private object ArkanXlsxWriter {
 
 
 private object DxfKmlImporter {
-    data class ImportResult(val kml: String, val summary: String, val layerLengths: Map<String, Double>, val manholeCount: Int, val manholes: List<Manhole>)
+    data class ImportResult(
+        val kml: String,
+        val summary: String,
+        val layerLengths: Map<String, Double>,
+        val manholeCount: Int,
+        val manholes: List<Manhole>,
+        val diameterLengths: Map<Int, Double>,
+        val unclassifiedGeometryLength: Double
+    )
     private data class PairCode(val code: Int, val value: String)
     private data class GeoPoint(val lon: Double, val lat: Double, val alt: Double)
     private data class DxfPosition(val east: Double, val north: Double, val alt: Double)
@@ -564,6 +644,16 @@ private object DxfKmlImporter {
             val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
             val labelText = e.firstOrNull { it.code == 1 }?.value ?: e.firstOrNull { it.code == 3 }?.value ?: return@mapNotNull null
             DxfLabel(east, north, labelText)
+        }
+        val pipeLabelPattern = Regex("""(?i)(\\d+(?:\\.\\d+)?)\\s*m\\s+of\\s+(\\d+)\\s*mm\\b.*\\bpipe\\b""")
+        val diameterLengths = mutableMapOf<Int, Double>()
+        labels.forEach { label ->
+            val match = pipeLabelPattern.find(label.text) ?: return@forEach
+            val length = match.groupValues[1].toDoubleOrNull() ?: return@forEach
+            val diameter = match.groupValues[2].toIntOrNull() ?: return@forEach
+            if (length > 0.0 && diameter > 0) {
+                diameterLengths[diameter] = (diameterLengths[diameter] ?: 0.0) + length
+            }
         }
         val importedManholes = structurePositions.mapIndexed { index, pos ->
             val nearestStructure = labels.filter { it.text.contains("STRUCTURE", true) }
@@ -609,7 +699,18 @@ private object DxfKmlImporter {
         require(pipeCount > 0 || mhCount > 0) { "لم يتم العثور على خطوط أو مناهيل في الطبقات المحددة" }
         val kml = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ARKAN Sewer Network</name>$placemarks</Document></kml>"""
-        return ImportResult(kml, "خطوط: $pipeCount | مناهيل: $mhCount", layerLengths, mhCount, importedManholes)
+        val geometricCenterlineLength = layerLengths.values.sum()
+        val labelledDiameterLength = diameterLengths.values.sum()
+        val unclassifiedGeometryLength = geometricCenterlineLength - labelledDiameterLength
+        return ImportResult(
+            kml,
+            "خطوط: $pipeCount | مناهيل: $mhCount | أقطار موسومة: ${diameterLengths.size}",
+            layerLengths,
+            mhCount,
+            importedManholes,
+            diameterLengths,
+            unclassifiedGeometryLength
+        )
     }
     private fun xmlEscape(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
     private fun fmt(v: Double) = String.format(Locale.US, "%.8f", v)
