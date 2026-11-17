@@ -645,7 +645,7 @@ private object DxfKmlImporter {
             val labelText = e.firstOrNull { it.code == 1 }?.value ?: e.firstOrNull { it.code == 3 }?.value ?: return@mapNotNull null
             DxfLabel(east, north, labelText)
         }
-        val pipeLabelPattern = Regex("""(?i)(\\d+(?:\\.\\d+)?)\\s*m\\s+of\\s+(\\d+)\\s*mm\\b.*\\bpipe\\b""")
+        val pipeLabelPattern = Regex("""(?i)(\d+(?:\.\d+)?)\s*m\s+of\s+(\d+)\s*mm\b.*\bpipe\b""")
         val diameterLengths = mutableMapOf<Int, Double>()
         labels.forEach { label ->
             val match = pipeLabelPattern.find(label.text) ?: return@forEach
