@@ -36,6 +36,7 @@ private const val PX_PER_METER = 40f
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
 private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double, val altitude: Double = 0.0) {
     val type: String get() = when { depth <= 0.0 -> "غير معروف"; depth <= 1.70 -> "AS"; depth <= 3.00 -> "BS"; depth <= 4.00 -> "CD"; else -> "خارج التصنيف" }
+    val isCircular: Boolean get() = depth >= 1.70
     val excavation: Double get() = length * width * depth
 }
 
@@ -230,7 +231,7 @@ private fun ArkanApp() {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(pipeLayer, { pipeLayer = it }, label = { Text("Layer الأنبوب") }, modifier = Modifier.weight(1f), singleLine = true)
-                Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("LOAD LSP") }
+                Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("اختيار LSP") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(trenchWidth, { trenchWidth = it }, label = { Text("عرض الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -261,8 +262,14 @@ private fun ArkanApp() {
                 pipes.forEach { drawLine(Color(0xFF00C8A0),it.a,it.b,5f); drawCircle(Color.White,4f,it.a); drawCircle(Color.White,4f,it.b) }
                 pipeStart?.let { drawCircle(Color.Yellow,8f,it) }
                 manholes.forEach { mh ->
-                    val hw=(mh.width*PX_PER_METER/2).toFloat(); val hl=(mh.length*PX_PER_METER/2).toFloat()
-                    drawRect(Color(0xFFFFC857),Offset(mh.point.x-hw,mh.point.y-hl),androidx.compose.ui.geometry.Size(hw*2,hl*2),style=androidx.compose.ui.graphics.drawscope.Stroke(width=3f))
+                    if (mh.isCircular) {
+                        val radius = (0.7318 * PX_PER_METER / 2).toFloat()
+                        drawCircle(Color(0xFFFFC857), radius, mh.point, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f))
+                    } else {
+                        val halfWidth = (0.70 * PX_PER_METER / 2).toFloat()
+                        val halfLength = (1.10 * PX_PER_METER / 2).toFloat()
+                        drawRect(Color(0xFFFFC857), Offset(mh.point.x-halfWidth,mh.point.y-halfLength), androidx.compose.ui.geometry.Size(halfWidth*2,halfLength*2), style=androidx.compose.ui.graphics.drawscope.Stroke(width=3f))
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -290,12 +297,12 @@ private fun ArkanApp() {
                 effectiveLayerLengths.forEach { (layer, length) -> Text("$layer : %.2f م".format(Locale.US,length), color=Color(0xFFB8C7CE), fontSize=11.sp) }
             }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(onClick={xlsxSaver.launch("ARKAN_Quantity_Report.xlsx")}) { Text("EXCEL / XLSX") }
+                Button(onClick={xlsxSaver.launch("ARKAN_Quantity_Report.xlsx")}) { Text("تصدير Excel") }
                 Button(onClick={pdfSaver.launch("ARKAN_Report.pdf")}) { Text("PDF") }
             }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(onClick={showKmlDialog=true}) { Text("EXPORT KML") }
-                Button(onClick={pipes=emptyList();manholes=emptyList();pipeStart=null;pendingManhole=null;status="تم مسح الرسم."}) { Text("CLEAR") }
+                Button(onClick={showKmlDialog=true}) { Text("تصدير KML") }
+                Button(onClick={pipes=emptyList();manholes=emptyList();pipeStart=null;pendingManhole=null;status="تم مسح الرسم."}) { Text("مسح الرسم") }
             }
             Text("ملف DXF: $dxfFileName",color=Color.LightGray,fontSize=10.sp)
             if (importedSummary.isNotBlank()) Text("العناصر المستوردة: $importedSummary",color=Color(0xFF00C8A0),fontSize=10.sp)
@@ -319,16 +326,18 @@ private fun ArkanApp() {
             OutlinedTextField(mhWidth,{mhWidth=it},label={Text("العرض (م)")},singleLine=true)
             OutlinedTextField(mhNorthing,{mhNorthing=it},label={Text("N / Northing")},singleLine=true)
             OutlinedTextField(mhEasting,{mhEasting=it},label={Text("E / Easting")},singleLine=true)
-            Text("يجب إدخال العمق وإحداثيي N وE. التصنيف: AS حتى 1.70م، BS حتى 3.00م، CD حتى 4.00م.")
+            Text("أدخل العمق وإحداثيي N وE. التصنيف: AS حتى 1.70م، BS حتى 3.00م، CD حتى 4.00م. الشكل والأبعاد تلقائية: مستطيل 1.10 × 0.70م لأقل من 1.70م، ودائري بقطر 0.7318م من 1.70م فأكثر.")
         }},
         confirmButton={ TextButton(onClick={
             try {
-                val d=mhDepth.toDouble(); val l=mhLength.toDouble(); val w=mhWidth.toDouble()
+                val d=mhDepth.toDouble()
                 val n=mhNorthing.toDouble(); val e=mhEasting.toDouble()
                 val id=mhId.trim().ifBlank { "MH-%02d".format(Locale.US, manholes.size + 1) }
-                require(d>0 && d<=4.0 && l>0 && w>0)
+                require(d>0 && d<=4.0)
                 require(id !in manholes.map { it.id }) { "رقم المنهول مستخدم مسبقاً." }
-                pendingManhole=Manhole(id,Offset.Zero,d,l,w,n,e)
+                val length = if (d >= 1.70) 0.7318 else 1.10
+                val width = if (d >= 1.70) 0.7318 else 0.70
+                pendingManhole=Manhole(id,Offset.Zero,d,length,width,n,e)
                 mode="MANHOLE";showManholeDialog=false;status="المس مساحة الرسم لتحديد موقع المنهول."
             } catch(_:Exception) { status="أدخل العمق والطول والعرض وإحداثيي N وE بأرقام صحيحة؛ العمق حتى 4.00م، ولا تكرر رقم المنهول." }
         }) { Text("التالي: تحديد الموقع") }},
