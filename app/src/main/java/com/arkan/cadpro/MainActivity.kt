@@ -75,7 +75,8 @@ private fun ArkanApp() {
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
     var mode by remember { mutableStateOf("PIPE") }
     var pipeStart by remember { mutableStateOf<Offset?>(null) }
-    var pipeLayer by remember { mutableStateOf("SEWER") }
+    var pipeLayer by remember { mutableStateOf("PIPE-250") }
+    var showPipeDiameterMenu by remember { mutableStateOf(false) }
     var trenchWidth by remember { mutableStateOf("0.60") }
     var trenchDepth by remember { mutableStateOf("2.00") }
     var lispName by remember { mutableStateOf("لم يتم اختيار ملف LSP") }
@@ -262,15 +263,27 @@ private fun ArkanApp() {
                 .padding(10.dp)
         ) {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
-            Text("V1.7 • تحسين عرض المخطط والجداول", color = Color.LightGray, fontSize = 12.sp)
+            Text("V1.8 • اختيار أقطار الأنابيب", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }) { Text("استيراد DXF") }
                 Button(onClick = { mode = "PIPE"; pipeStart = null }) { Text("رسم أنبوب") }
                 Button(onClick = { showManholeDialog = true }) { Text("إضافة منهول") }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedTextField(pipeLayer, { pipeLayer = it }, label = { Text("Layer الأنبوب") }, modifier = Modifier.weight(1f), singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(1f)) {
+                    Button(onClick = { showPipeDiameterMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("قطر الأنبوب: ${pipeLayer.substringAfterLast("-")} مم")
+                    }
+                    DropdownMenu(expanded = showPipeDiameterMenu, onDismissRequest = { showPipeDiameterMenu = false }) {
+                        listOf("250", "315", "400", "500", "600", "700").forEach { diameter ->
+                            DropdownMenuItem(
+                                text = { Text("$diameter مم") },
+                                onClick = { pipeLayer = "PIPE-$diameter"; showPipeDiameterMenu = false; status = "تم اختيار قطر $diameter مم" }
+                            )
+                        }
+                    }
+                }
                 Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("اختيار LSP") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
