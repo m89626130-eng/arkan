@@ -226,9 +226,14 @@ private fun ArkanApp() {
 
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF00C8A0), background = Color(0xFF101418), surface = Color(0xFF1B2329))) {
-        Column(Modifier.fillMaxSize().background(Color(0xFF101418)).padding(10.dp)) {
+        Column(
+            Modifier.fillMaxSize()
+                .background(Color(0xFF101418))
+                .verticalScroll(rememberScrollState())
+                .padding(10.dp)
+        ) {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
-            Text("V1.6 • تحسين حساب الحفر", color = Color.LightGray, fontSize = 12.sp)
+            Text("V1.7 • تحسين عرض المخطط والجداول", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }) { Text("استيراد DXF") }
@@ -245,7 +250,7 @@ private fun ArkanApp() {
             }
             Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
-            Canvas(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer) {
+            Canvas(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer) {
                 detectTapGestures { tap ->
                     when {
                         pendingManhole != null -> {
