@@ -37,7 +37,7 @@ private data class Pipe(val a: Offset, val b: Offset, val layer: String)
 private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double, val altitude: Double = 0.0) {
     val type: String get() = when { depth <= 0.0 -> "غير معروف"; depth <= 1.70 -> "AS"; depth <= 3.00 -> "BS"; depth <= 4.00 -> "CD"; else -> "خارج التصنيف" }
     val isCircular: Boolean get() = depth >= 1.70
-    val excavation: Double get() = length * width * depth
+    val excavation: Double get() = if (isCircular) kotlin.math.PI * (length / 2.0) * (length / 2.0) * depth else length * width * depth
 }
 
 class MainActivity : ComponentActivity() {
@@ -228,7 +228,7 @@ private fun ArkanApp() {
     MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF00C8A0), background = Color(0xFF101418), surface = Color(0xFF1B2329))) {
         Column(Modifier.fillMaxSize().background(Color(0xFF101418)).padding(10.dp)) {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
-            Text("V1.5 • Excel reports", color = Color.LightGray, fontSize = 12.sp)
+            Text("V1.6 • تحسين حساب الحفر", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }) { Text("استيراد DXF") }
@@ -328,8 +328,6 @@ private fun ArkanApp() {
         text={ Column(Modifier.verticalScroll(rememberScrollState())) {
             OutlinedTextField(mhId,{mhId=it},label={Text("رقم المنهول")},singleLine=true)
             OutlinedTextField(mhDepth,{mhDepth=it},label={Text("العمق (م)")},singleLine=true)
-            OutlinedTextField(mhLength,{mhLength=it},label={Text("الطول (م)")},singleLine=true)
-            OutlinedTextField(mhWidth,{mhWidth=it},label={Text("العرض (م)")},singleLine=true)
             OutlinedTextField(mhNorthing,{mhNorthing=it},label={Text("N / Northing")},singleLine=true)
             OutlinedTextField(mhEasting,{mhEasting=it},label={Text("E / Easting")},singleLine=true)
             Text("أدخل العمق وإحداثيي N وE. التصنيف: AS حتى 1.70م، BS حتى 3.00م، CD حتى 4.00م. الشكل والأبعاد تلقائية: مستطيل 1.10 × 0.70م لأقل من 1.70م، ودائري بقطر 0.7318م من 1.70م فأكثر.")
@@ -345,7 +343,7 @@ private fun ArkanApp() {
                 val width = if (d >= 1.70) 0.7318 else 0.70
                 pendingManhole=Manhole(id,Offset.Zero,d,length,width,n,e)
                 mode="MANHOLE";showManholeDialog=false;status="المس مساحة الرسم لتحديد موقع المنهول."
-            } catch(_:Exception) { status="أدخل العمق والطول والعرض وإحداثيي N وE بأرقام صحيحة؛ العمق حتى 4.00م، ولا تكرر رقم المنهول." }
+            } catch(_:Exception) { status="أدخل العمق وإحداثيي N وE بأرقام صحيحة؛ العمق حتى 4.00م، ولا تكرر رقم المنهول." }
         }) { Text("التالي: تحديد الموقع") }},
         dismissButton={TextButton(onClick={showManholeDialog=false}) { Text("إلغاء") }}
     )
