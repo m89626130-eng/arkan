@@ -35,6 +35,20 @@ import kotlin.math.pow
 private const val PX_PER_METER = 40f
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
 
+private fun pipeLayerColor(layer: String): Color {
+    val key = layer.trim().uppercase(Locale.ROOT)
+    return when {
+        key.contains("250") -> Color(0xFFFF3030)
+        key.contains("315") -> Color(0xFF2878FF)
+        key.contains("400") -> Color(0xFF20C060)
+        key.contains("500") -> Color(0xFFFFD21F)
+        key.contains("600") -> Color(0xFF20D8E8)
+        key.contains("700") -> Color(0xFFFF9633)
+        else -> Color(0xFF00C8A0)
+    }
+}
+
+
 private fun nearestManhole(point: Offset, manholes: List<Manhole>): Manhole? =
     manholes.minByOrNull { hypot((it.point.x - point.x).toDouble(), (it.point.y - point.y).toDouble()) }
         ?.takeIf { hypot((it.point.x - point.x).toDouble(), (it.point.y - point.y).toDouble()) <= 3.0 * PX_PER_METER }
@@ -286,7 +300,7 @@ private fun ArkanApp() {
                 for (x in 0..(size.width/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(x*PX_PER_METER,0f), Offset(x*PX_PER_METER,size.height),1f)
                 for (y in 0..(size.height/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(0f,y*PX_PER_METER), Offset(size.width,y*PX_PER_METER),1f)
                 pipes.forEach { pipe ->
-                    drawLine(Color(0xFF00C8A0), pipe.a, pipe.b, 5f)
+                    drawLine(pipeLayerColor(pipe.layer), pipe.a, pipe.b, 5f)
                     drawCircle(Color.White, 4f, pipe.a)
                     drawCircle(Color.White, 4f, pipe.b)
                     connectedManholes(pipe, manholes)?.let { (startMh, endMh) ->
@@ -300,9 +314,9 @@ private fun ArkanApp() {
                         val mid = Offset((pipe.a.x + pipe.b.x) / 2f, (pipe.a.y + pipe.b.y) / 2f)
                         val tip = Offset(mid.x + ux * 13f, mid.y + uy * 13f)
                         val back = Offset(mid.x - ux * 9f, mid.y - uy * 9f)
-                        drawLine(Color(0xFFFFC857), back, tip, 3f)
-                        drawLine(Color(0xFFFFC857), tip, Offset(tip.x - ux * 8f - uy * 6f, tip.y - uy * 8f + ux * 6f), 3f)
-                        drawLine(Color(0xFFFFC857), tip, Offset(tip.x - ux * 8f + uy * 6f, tip.y - uy * 8f - ux * 6f), 3f)
+                        drawLine(pipeLayerColor(pipe.layer), back, tip, 3f)
+                        drawLine(pipeLayerColor(pipe.layer), tip, Offset(tip.x - ux * 8f - uy * 6f, tip.y - uy * 8f + ux * 6f), 3f)
+                        drawLine(pipeLayerColor(pipe.layer), tip, Offset(tip.x - ux * 8f + uy * 6f, tip.y - uy * 8f - ux * 6f), 3f)
                     }
                 }
                 pipeStart?.let { drawCircle(Color.Yellow,8f,it) }
@@ -356,7 +370,19 @@ private fun ArkanApp() {
                         Text("مقطع ${index + 1} | ${pipe.layer} | طول %.2f م | اربط طرفي الأنبوب بمركزي منهولين لهما INV لإظهار الميل والسهم.".format(Locale.US, lengthM), color = Color(0xFFB8C7CE), fontSize = 11.sp)
                     }
                 }
-                Text("السهم الأصفر يوضح اتجاه الانحدار من INV الأعلى إلى INV الأقل.", color = Color(0xFFFFC857), fontSize = 10.sp)
+                Text("ألوان الأنابيب حسب القطر: 250 أحمر، 315 أزرق، 400 أخضر، 500 أصفر، 600 سماوي، 700 برتقالي.", color = Color.LightGray, fontSize = 10.sp)
+                Spacer(Modifier.height(4.dp))
+                Text("إجمالي الأطوال حسب الطبقة", color = Color.White, fontSize = 13.sp)
+                val drawnLayerTotals = pipes.groupBy { it.layer }.mapValues { entry ->
+                    entry.value.sumOf { hypot((it.b.x - it.a.x).toDouble(), (it.b.y - it.a.y).toDouble()) / PX_PER_METER }
+                }
+                drawnLayerTotals.toSortedMap().forEach { (layer, length) ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(layer, color = pipeLayerColor(layer), fontSize = 11.sp)
+                        Text("%.2f م".format(Locale.US, length), color = Color.White, fontSize = 11.sp)
+                    }
+                }
+                Text("المجموع الكلي: %.2f م".format(Locale.US, drawnLayerTotals.values.sum()), color = Color(0xFF00C8A0), fontSize = 12.sp)
             }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 Button(onClick={xlsxSaver.launch("ARKAN_Quantity_Report.xlsx")}) { Text("تصدير Excel") }
