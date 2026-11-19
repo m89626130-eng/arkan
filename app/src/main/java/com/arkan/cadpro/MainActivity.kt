@@ -211,11 +211,17 @@ private fun ArkanApp() {
 
     val kmlSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")) { uri: Uri? ->
         if (uri != null) try {
+            val manualNetwork = if (importedKml == null && manholes.isNotEmpty()) DxfKmlImporter.convertManual(manholes, pipes) else null
             val lon = longitude.toDouble(); val lat = latitude.toDouble()
-            require(lon in -180.0..180.0 && lat in -90.0..90.0)
-            context.contentResolver.openOutputStream(uri)?.use { OutputStreamWriter(it, Charsets.UTF_8).use { writer -> writer.write(importedKml ?: KmlPointWriter.point("ARKAN reference point", lon, lat)) } }
-            status = if (importedKml != null) "تم تصدير شبكة المجاري المستوردة إلى KML." else "تم حفظ نقطة KML المرجعية."
-        } catch (_: Exception) { status = "إحداثيات WGS84 غير صحيحة." }
+            require(importedKml != null || manualNetwork != null || (lon in -180.0..180.0 && lat in -90.0..90.0))
+            val outputKml = importedKml ?: manualNetwork?.first ?: KmlPointWriter.point("ARKAN reference point", lon, lat)
+            context.contentResolver.openOutputStream(uri)?.use { OutputStreamWriter(it, Charsets.UTF_8).use { writer -> writer.write(outputKml) } }
+            status = when {
+                importedKml != null -> "تم تصدير شبكة DXF إلى KML."
+                manualNetwork != null -> "تم تصدير ${manholes.size} منهل و${manualNetwork.second} مقطع أنبوب بإحداثيات UTM Zone 38N."
+                else -> "تم حفظ نقطة KML المرجعية."
+            }
+        } catch (e: Exception) { status = "تعذر تصدير KML: ${e.message}" }
     }
 
 
@@ -345,16 +351,17 @@ private fun ArkanApp() {
     )
 
     if(showKmlDialog) AlertDialog(
-        onDismissRequest={showKmlDialog=false},title={Text(if (importedKml != null) "تصدير شبكة المجاري KML" else "نقطة مرجعية KML / WGS84")},
+        onDismissRequest={showKmlDialog=false},title={Text(if (importedKml != null || manholes.isNotEmpty()) "تصدير شبكة المجاري KML" else "نقطة مرجعية KML / WGS84")},
         text={Column {
-            if (importedKml != null) Text("سيتم تصدير خطوط الأنابيب والمناهيل من ملف DXF إلى KML. $importedSummary\nالتحويل يفترض WGS84 / UTM Zone 38N.")
+            if (importedKml != null) Text("سيتم تصدير هندسة DXF المستوردة. $importedSummary\nالتحويل يفترض WGS84 / UTM Zone 38N.")
+            else if (manholes.isNotEmpty()) Text("سيتم تحويل إحداثيات N وE للمناهيل إلى WGS84 وتصدير نقاطها، وربط الأنبوب إذا كانت نهايتاه قريبتين من مركزي منهولين. النظام المفترض UTM Zone 38N.")
             else {
                 OutlinedTextField(longitude,{longitude=it},label={Text("Longitude")})
                 OutlinedTextField(latitude,{latitude=it},label={Text("Latitude")})
                 Text("أدخل إحداثيات WGS84 لنقطة مرجعية.")
             }
         }},
-        confirmButton={TextButton(onClick={showKmlDialog=false;kmlSaver.launch(if (importedKml != null) "ARKAN_SEWER_NETWORK.kml" else "ARKAN_reference.kml")}) { Text("حفظ KML") }},
+        confirmButton={TextButton(onClick={showKmlDialog=false;kmlSaver.launch(if (importedKml != null || manholes.isNotEmpty()) "ARKAN_SEWER_NETWORK.kml" else "ARKAN_reference.kml")}) { Text("حفظ KML") }},
         dismissButton={TextButton(onClick={showKmlDialog=false}) { Text("إلغاء") }}
     )
 }
@@ -615,6 +622,35 @@ private object DxfKmlImporter {
     private data class GeoPoint(val lon: Double, val lat: Double, val alt: Double)
     private data class DxfPosition(val east: Double, val north: Double, val alt: Double)
     private data class DxfLabel(val east: Double, val north: Double, val text: String)
+    fun convertManual(manholes: List<Manhole>, pipes: List<Pipe>): Pair<String, Int> {
+        require(manholes.isNotEmpty()) { "لا توجد مناهيل للتصدير" }
+        val placemarks = StringBuilder()
+        manholes.forEach { mh ->
+            val geo = utmToWgs84(mh.easting, mh.northing, mh.altitude)
+            placemarks.append("<Placemark><name>${xmlEscape(mh.id)}</name><Point><coordinates>${fmt(geo.lon)},${fmt(geo.lat)},${fmt(geo.alt)}</coordinates></Point></Placemark>")
+        }
+        var exportedPipes = 0
+        val maxSnapPixels = PX_PER_METER * 3.0
+        pipes.forEachIndexed { index, pipe ->
+            val start = manholes.minByOrNull { hypot((it.point.x - pipe.a.x).toDouble(), (it.point.y - pipe.a.y).toDouble()) }
+            val end = manholes.minByOrNull { hypot((it.point.x - pipe.b.x).toDouble(), (it.point.y - pipe.b.y).toDouble()) }
+            if (start != null && end != null && start.id != end.id) {
+                val startDistance = hypot((start.point.x - pipe.a.x).toDouble(), (start.point.y - pipe.a.y).toDouble())
+                val endDistance = hypot((end.point.x - pipe.b.x).toDouble(), (end.point.y - pipe.b.y).toDouble())
+                if (startDistance <= maxSnapPixels && endDistance <= maxSnapPixels) {
+                    val a = utmToWgs84(start.easting, start.northing, start.altitude)
+                    val b = utmToWgs84(end.easting, end.northing, end.altitude)
+                    val name = xmlEscape("${pipe.layer} - Pipe ${index + 1}")
+                    placemarks.append("<Placemark><name>$name</name><Style><LineStyle><color>ff00ffff</color><width>3</width></LineStyle></Style><LineString><tessellate>1</tessellate><coordinates>${fmt(a.lon)},${fmt(a.lat)},${fmt(a.alt)} ${fmt(b.lon)},${fmt(b.lat)},${fmt(b.alt)}</coordinates></LineString></Placemark>")
+                    exportedPipes++
+                }
+            }
+        }
+        val kml = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ARKAN Manual Sewer Network - UTM 38N</name>$placemarks</Document></kml>"""
+        return kml to exportedPipes
+    }
+
     fun convert(raw: String): ImportResult {
         val lines = raw.replace("\r", "").lines()
         val pairs = mutableListOf<PairCode>()
