@@ -308,7 +308,23 @@ private fun ArkanApp() {
             }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 Button(onClick={showKmlDialog=true}) { Text("تصدير KML") }
-                Button(onClick={pipes=emptyList();manholes=emptyList();pipeStart=null;pendingManhole=null;importedKml=null;importedSummary="";importedLayerLengths=emptyMap();importedManholeCount=0;importedManholes=emptyList();importedDiameterLengths=emptyMap();importedUnclassifiedGeometryLength=0.0;dxfFileName="لم يتم اختيار DXF";status="تم مسح المشروع الحالي بالكامل، بما فيه بيانات DXF المستوردة.") { Text("مسح المشروع") }
+                Button(
+                    onClick = {
+                        pipes = emptyList()
+                        manholes = emptyList()
+                        pipeStart = null
+                        pendingManhole = null
+                        importedKml = null
+                        importedSummary = ""
+                        importedLayerLengths = emptyMap()
+                        importedManholeCount = 0
+                        importedManholes = emptyList()
+                        importedDiameterLengths = emptyMap()
+                        importedUnclassifiedGeometryLength = 0.0
+                        dxfFileName = "لم يتم اختيار DXF"
+                        status = "تم مسح المشروع الحالي بالكامل، بما فيه بيانات DXF المستوردة."
+                    }
+                ) { Text("مسح المشروع") }
             }
             Text("ملف DXF: $dxfFileName",color=Color.LightGray,fontSize=10.sp)
             if (importedSummary.isNotBlank()) Text("العناصر المستوردة: $importedSummary",color=Color(0xFF00C8A0),fontSize=10.sp)
