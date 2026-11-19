@@ -506,6 +506,7 @@ private object ArkanXlsxWriter {
             ArkanXlsxCell(""),
             ArkanXlsxCell(""),
             ArkanXlsxCell(""),
+            ArkanXlsxCell(""),
             ArkanXlsxCell("", manholes.sumOf { it.excavation }, 3)
         )
 
@@ -517,7 +518,7 @@ private object ArkanXlsxWriter {
             put(zip, "xl/styles.xml", styles())
             put(zip, "xl/worksheets/sheet1.xml", sheet(summaryRows, listOf(38.0, 18.0, 14.0)))
             put(zip, "xl/worksheets/sheet2.xml", sheet(layerRows, listOf(34.0, 22.0, 34.0)))
-            put(zip, "xl/worksheets/sheet3.xml", sheet(manholeRows, listOf(18.0, 14.0, 15.0, 15.0, 15.0, 22.0, 22.0, 20.0)))
+            put(zip, "xl/worksheets/sheet3.xml", sheet(manholeRows, listOf(18.0, 14.0, 15.0, 15.0, 15.0, 15.0, 15.0, 22.0, 22.0, 20.0)))
             zip.finish()
         }
     }
