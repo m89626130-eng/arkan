@@ -12,8 +12,8 @@ android {
         applicationId = "com.arkan.cadpro"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.6"
+        versionCode = 4
+        versionName = "1.8"
     }
 
     buildFeatures { compose = true }
