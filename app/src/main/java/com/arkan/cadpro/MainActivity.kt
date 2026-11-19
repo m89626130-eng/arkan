@@ -34,6 +34,17 @@ import kotlin.math.pow
 
 private const val PX_PER_METER = 40f
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
+
+private fun nearestManhole(point: Offset, manholes: List<Manhole>): Manhole? =
+    manholes.minByOrNull { hypot((it.point.x - point.x).toDouble(), (it.point.y - point.y).toDouble()) }
+        ?.takeIf { hypot((it.point.x - point.x).toDouble(), (it.point.y - point.y).toDouble()) <= 3.0 * PX_PER_METER }
+
+private fun connectedManholes(pipe: Pipe, manholes: List<Manhole>): Pair<Manhole, Manhole>? {
+    val start = nearestManhole(pipe.a, manholes) ?: return null
+    val end = nearestManhole(pipe.b, manholes) ?: return null
+    return if (start.id != end.id && start.invertLevel != null && end.invertLevel != null) start to end else null
+}
+
 private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double, val altitude: Double = 0.0, val groundLevel: Double? = null, val invertLevel: Double? = null) {
     val type: String get() = when { depth <= 0.0 -> "غير معروف"; depth <= 1.70 -> "AS"; depth <= 3.00 -> "BS"; depth <= 4.00 -> "CD"; else -> "خارج التصنيف" }
     val isCircular: Boolean get() = depth >= 1.70
@@ -274,7 +285,26 @@ private fun ArkanApp() {
             }) {
                 for (x in 0..(size.width/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(x*PX_PER_METER,0f), Offset(x*PX_PER_METER,size.height),1f)
                 for (y in 0..(size.height/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(0f,y*PX_PER_METER), Offset(size.width,y*PX_PER_METER),1f)
-                pipes.forEach { drawLine(Color(0xFF00C8A0),it.a,it.b,5f); drawCircle(Color.White,4f,it.a); drawCircle(Color.White,4f,it.b) }
+                pipes.forEach { pipe ->
+                    drawLine(Color(0xFF00C8A0), pipe.a, pipe.b, 5f)
+                    drawCircle(Color.White, 4f, pipe.a)
+                    drawCircle(Color.White, 4f, pipe.b)
+                    connectedManholes(pipe, manholes)?.let { (startMh, endMh) ->
+                        val downstream = if (startMh.invertLevel!! > endMh.invertLevel!!) pipe.b else pipe.a
+                        val upstream = if (downstream == pipe.b) pipe.a else pipe.b
+                        val dx = downstream.x - upstream.x
+                        val dy = downstream.y - upstream.y
+                        val length = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(1f)
+                        val ux = dx / length
+                        val uy = dy / length
+                        val mid = Offset((pipe.a.x + pipe.b.x) / 2f, (pipe.a.y + pipe.b.y) / 2f)
+                        val tip = Offset(mid.x + ux * 13f, mid.y + uy * 13f)
+                        val back = Offset(mid.x - ux * 9f, mid.y - uy * 9f)
+                        drawLine(Color(0xFFFFC857), back, tip, 3f)
+                        drawLine(Color(0xFFFFC857), tip, Offset(tip.x - ux * 8f - uy * 6f, tip.y - uy * 8f + ux * 6f), 3f)
+                        drawLine(Color(0xFFFFC857), tip, Offset(tip.x - ux * 8f + uy * 6f, tip.y - uy * 8f - ux * 6f), 3f)
+                    }
+                }
                 pipeStart?.let { drawCircle(Color.Yellow,8f,it) }
                 manholes.forEach { mh ->
                     if (mh.isCircular) {
@@ -310,6 +340,23 @@ private fun ArkanApp() {
             } else if (effectiveLayerLengths.isNotEmpty()) {
                 Text("أطوال الأنابيب حسب Layer", color=Color.White, fontSize=13.sp)
                 effectiveLayerLengths.forEach { (layer, length) -> Text("$layer : %.2f م".format(Locale.US,length), color=Color(0xFFB8C7CE), fontSize=11.sp) }
+            }
+            if (pipes.isNotEmpty()) {
+                Text("بيانات مقاطع الأنابيب والميل", color = Color.White, fontSize = 14.sp)
+                pipes.forEachIndexed { index, pipe ->
+                    val lengthM = hypot((pipe.b.x - pipe.a.x).toDouble(), (pipe.b.y - pipe.a.y).toDouble()) / PX_PER_METER
+                    val pair = connectedManholes(pipe, manholes)
+                    if (pair != null && lengthM > 0.0) {
+                        val (startMh, endMh) = pair
+                        val delta = startMh.invertLevel!! - endMh.invertLevel!!
+                        val slopePercent = kotlin.math.abs(delta) / lengthM * 100.0
+                        val flow = if (delta > 0.0) "${startMh.id} ← ${endMh.id}" else "${startMh.id} → ${endMh.id}"
+                        Text("مقطع ${index + 1} | ${pipe.layer} | طول %.2f م | ميل %.2f%% | اتجاه الجريان: %s".format(Locale.US, lengthM, slopePercent, flow), color = Color(0xFFB8C7CE), fontSize = 11.sp)
+                    } else {
+                        Text("مقطع ${index + 1} | ${pipe.layer} | طول %.2f م | اربط طرفي الأنبوب بمركزي منهولين لهما INV لإظهار الميل والسهم.".format(Locale.US, lengthM), color = Color(0xFFB8C7CE), fontSize = 11.sp)
+                    }
+                }
+                Text("السهم الأصفر يوضح اتجاه الانحدار من INV الأعلى إلى INV الأقل.", color = Color(0xFFFFC857), fontSize = 10.sp)
             }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 Button(onClick={xlsxSaver.launch("ARKAN_Quantity_Report.xlsx")}) { Text("تصدير Excel") }
