@@ -34,7 +34,7 @@ import kotlin.math.pow
 
 private const val PX_PER_METER = 40f
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
-private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double, val altitude: Double = 0.0) {
+private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double, val altitude: Double = 0.0, val groundLevel: Double? = null, val invertLevel: Double? = null) {
     val type: String get() = when { depth <= 0.0 -> "غير معروف"; depth <= 1.70 -> "AS"; depth <= 3.00 -> "BS"; depth <= 4.00 -> "CD"; else -> "خارج التصنيف" }
     val isCircular: Boolean get() = depth >= 1.70
     val excavation: Double get() = if (isCircular) kotlin.math.PI * (length / 2.0) * (length / 2.0) * depth else length * width * depth
@@ -73,6 +73,8 @@ private fun ArkanApp() {
     var mhWidth by remember { mutableStateOf("1.10") }
     var mhNorthing by remember { mutableStateOf("") }
     var mhEasting by remember { mutableStateOf("") }
+    var mhGroundLevel by remember { mutableStateOf("") }
+    var mhInvertLevel by remember { mutableStateOf("") }
     var pendingManhole by remember { mutableStateOf<Manhole?>(null) }
     val context = LocalContext.current
 
@@ -133,8 +135,8 @@ private fun ArkanApp() {
             rows.add("Pipe lengths by Layer,,")
             effectiveLayerLengths.forEach { (layer,length) -> rows.add("$layer,${String.format(Locale.US,"%.2f",length)},m") }
             rows.add("")
-            rows.add("Manhole ID,Type,Depth m,Length m,Width m,N,E,Excavation m3")
-            effectiveManholes.forEach { mh -> rows.add("${mh.id},${mh.type},${mh.depth},${mh.length},${mh.width},${mh.northing},${mh.easting},${String.format(Locale.US,"%.2f",mh.excavation)}") }
+            rows.add("Manhole ID,Type,Depth m,GL m,INV m,Length m,Width m,N,E,Excavation m3")
+            effectiveManholes.forEach { mh -> rows.add("${mh.id},${mh.type},${mh.depth},${mh.groundLevel ?: ""},${mh.invertLevel ?: ""},${mh.length},${mh.width},${mh.northing},${mh.easting},${String.format(Locale.US,"%.2f",mh.excavation)}") }
             context.contentResolver.openOutputStream(uri)?.use { it.write(("\uFEFF" + rows.joinToString("\r\n")).toByteArray(Charsets.UTF_8)) }
             status = "تم تصدير جدول الكميات بصيغة CSV المتوافقة مع Excel."
         } catch (e: Exception) { status = "تعذر تصدير جدول Excel: ${e.message}" }
@@ -187,8 +189,8 @@ private fun ArkanApp() {
             lines.add("Geometric centerline by DXF layer:")
             effectiveLayerLengths.forEach { (layer,length) -> lines.add("$layer : %.2f m".format(Locale.US,length)) }
             lines.add("")
-            lines.add("Manholes: ID | Type | Depth | Length | Width | N | E | Excavation")
-            effectiveManholes.forEach { mh -> lines.add("${mh.id} | ${mh.type} | ${mh.depth} | ${mh.length} | ${mh.width} | ${mh.northing} | ${mh.easting} | %.2f".format(Locale.US,mh.excavation)) }
+            lines.add("Manholes: ID | Type | Depth | GL | INV | Length | Width | N | E | Excavation")
+            effectiveManholes.forEach { mh -> lines.add("${mh.id} | ${mh.type} | ${mh.depth} | ${mh.groundLevel ?: "-"} | ${mh.invertLevel ?: "-"} | ${mh.length} | ${mh.width} | ${mh.northing} | ${mh.easting} | %.2f".format(Locale.US,mh.excavation)) }
             var pageNumber = 1
             var page = document.startPage(PdfDocument.PageInfo.Builder(595,842,pageNumber).create())
             var y = 48f
@@ -229,6 +231,8 @@ private fun ArkanApp() {
         Column(
             Modifier.fillMaxSize()
                 .background(Color(0xFF101418))
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(10.dp)
         ) {
@@ -255,7 +259,7 @@ private fun ArkanApp() {
                     when {
                         pendingManhole != null -> {
                             val mh = pendingManhole!!.copy(point = tap)
-                            manholes = manholes + mh; mhId = "MH-%02d".format(Locale.US, manholes.size + 1); mhDepth = ""; mhNorthing = ""; mhEasting = ""; pendingManhole = null; status = "تمت إضافة ${mh.id} (${mh.type})"
+                            manholes = manholes + mh; mhId = "MH-%02d".format(Locale.US, manholes.size + 1); mhDepth = ""; mhNorthing = ""; mhEasting = ""; mhGroundLevel = ""; mhInvertLevel = ""; pendingManhole = null; status = "تمت إضافة ${mh.id} (${mh.type})"
                         }
                         mode == "PIPE" -> {
                             val first = pipeStart
@@ -338,7 +342,7 @@ private fun ArkanApp() {
                 Text("جدول المناهيل",color=Color.White,fontSize=14.sp)
                 if (importedKml != null) Text("أبعاد الحفر الافتراضية للمناهيل المستوردة: 1.10 × 1.10 م؛ العمق من نص h في DXF.",color=Color.LightGray,fontSize=10.sp)
                 Column(Modifier.heightIn(max=150.dp).verticalScroll(rememberScrollState())) {
-                    effectiveManholes.forEach { mh -> Text("${mh.id} | ${mh.type} | عمق ${mh.depth}م | N ${mh.northing} | E ${mh.easting} | حفر %.2fم³".format(Locale.US,mh.excavation),color=Color(0xFFB8C7CE),fontSize=11.sp) }
+                    effectiveManholes.forEach { mh -> Text("${mh.id} | ${mh.type} | H ${mh.depth}م | GL ${mh.groundLevel ?: "-"} | INV ${mh.invertLevel ?: "-"} | N ${mh.northing} | E ${mh.easting} | حفر %.2fم³".format(Locale.US,mh.excavation),color=Color(0xFFB8C7CE),fontSize=11.sp) }
                 }
             }
         }
@@ -351,18 +355,23 @@ private fun ArkanApp() {
             OutlinedTextField(mhDepth,{mhDepth=it},label={Text("العمق (م)")},singleLine=true)
             OutlinedTextField(mhNorthing,{mhNorthing=it},label={Text("N / Northing")},singleLine=true)
             OutlinedTextField(mhEasting,{mhEasting=it},label={Text("E / Easting")},singleLine=true)
-            Text("أدخل العمق وإحداثيي N وE. التصنيف: AS حتى 1.70م، BS حتى 3.00م، CD حتى 4.00م. الشكل والأبعاد تلقائية: مستطيل 1.10 × 0.70م لأقل من 1.70م، ودائري بقطر 0.7318م من 1.70م فأكثر.")
+            OutlinedTextField(mhGroundLevel,{mhGroundLevel=it},label={Text("GL / منسوب سطح الأرض (اختياري)")},singleLine=true)
+            OutlinedTextField(mhInvertLevel,{mhInvertLevel=it},label={Text("INV / منسوب قاع الأنبوب (اختياري)")},singleLine=true)
+            Text("أدخل N وE والعمق H، أو أدخل GL وINV معاً ليُحسب H = GL - INV تلقائياً. التصنيف: AS حتى 1.70م، BS حتى 3.00م، CD حتى 4.00م. الأبعاد تلقائية حسب العمق.")
         }},
         confirmButton={ TextButton(onClick={
             try {
-                val d=mhDepth.toDouble()
+                val gl = mhGroundLevel.toDoubleOrNull()
+                val inv = mhInvertLevel.toDoubleOrNull()
+                require((mhGroundLevel.isBlank() && mhInvertLevel.isBlank()) || (gl != null && inv != null)) { "أدخل GL وINV معاً." }
+                val d = if (gl != null && inv != null) gl - inv else mhDepth.toDouble()
                 val n=mhNorthing.toDouble(); val e=mhEasting.toDouble()
                 val id=mhId.trim().ifBlank { "MH-%02d".format(Locale.US, manholes.size + 1) }
                 require(d>0 && d<=4.0)
                 require(id !in manholes.map { it.id }) { "رقم المنهول مستخدم مسبقاً." }
                 val length = if (d >= 1.70) 0.7318 else 1.10
                 val width = if (d >= 1.70) 0.7318 else 0.70
-                pendingManhole=Manhole(id,Offset.Zero,d,length,width,n,e)
+                pendingManhole=Manhole(id,Offset.Zero,d,length,width,n,e,groundLevel=gl,invertLevel=inv)
                 mode="MANHOLE";showManholeDialog=false;status="المس مساحة الرسم لتحديد موقع المنهول."
             } catch(_:Exception) { status="أدخل العمق وإحداثيي N وE بأرقام صحيحة؛ العمق حتى 4.00م، ولا تكرر رقم المنهول." }
         }) { Text("التالي: تحديد الموقع") }},
@@ -466,7 +475,9 @@ private object ArkanXlsxWriter {
         manholeRows += listOf(
             ArkanXlsxCell("رقم المنهول", style = 2),
             ArkanXlsxCell("التصنيف", style = 2),
-            ArkanXlsxCell("العمق (م)", style = 2),
+            ArkanXlsxCell("العمق H (م)", style = 2),
+            ArkanXlsxCell("GL (م)", style = 2),
+            ArkanXlsxCell("INV (م)", style = 2),
             ArkanXlsxCell("الطول (م)", style = 2),
             ArkanXlsxCell("العرض (م)", style = 2),
             ArkanXlsxCell("N / Northing", style = 2),
@@ -478,6 +489,8 @@ private object ArkanXlsxWriter {
                 ArkanXlsxCell(mh.id),
                 ArkanXlsxCell(mh.type),
                 ArkanXlsxCell("", mh.depth, 3),
+                ArkanXlsxCell("", mh.groundLevel, 3),
+                ArkanXlsxCell("", mh.invertLevel, 3),
                 ArkanXlsxCell("", mh.length, 3),
                 ArkanXlsxCell("", mh.width, 3),
                 ArkanXlsxCell("", mh.northing, 3),
