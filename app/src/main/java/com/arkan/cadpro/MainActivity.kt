@@ -141,6 +141,22 @@ private fun ArkanApp() {
         }
     }
 
+    val dwgPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) try {
+            val convertedFile = LibreDwgRunner.convertDwgToDxf(context, uri)
+            val converted = DxfKmlImporter.convert(convertedFile.readText(Charsets.UTF_8))
+            importedKml = converted.kml
+            importedSummary = converted.summary
+            importedLayerLengths = converted.layerLengths
+            importedManholeCount = converted.manholeCount
+            importedManholes = converted.manholes
+            importedDiameterLengths = converted.diameterLengths
+            importedUnclassifiedGeometryLength = converted.unclassifiedGeometryLength
+            dxfFileName = uri.lastPathSegment ?: "DWG"
+            status = "تم تحويل DWG واستيراد هندسته: $importedSummary"
+        } catch (e: Exception) { status = "تعذر استيراد DWG: " + e.message }
+    }
+
     val lispPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) { lispName = uri.lastPathSegment ?: "LSP file selected"; status = "تم اختيار ملف LISP. شغّله في AutoCAD المكتبي باستخدام APPLOAD." }
     }
@@ -254,6 +270,18 @@ private fun ArkanApp() {
         } catch (e: Exception) { status = "تعذر تصدير DXF: ${e.message}" }
     }
 
+    val dwgSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/acad")) { uri: Uri? ->
+        if (uri != null) try {
+            val e0 = referenceEasting.toDoubleOrNull() ?: error("أدخل Easting لنقطة مرجعية UTM أولاً.")
+            val n0 = referenceNorthing.toDoubleOrNull() ?: error("أدخل Northing لنقطة مرجعية UTM أولاً.")
+            require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) { "إحداثيات UTM غير صحيحة." }
+            val dxfText = buildArkanDxf(pipes, effectiveManholes, e0, n0)
+            val dwgFile = LibreDwgRunner.convertDxfToDwg(context, dxfText)
+            context.contentResolver.openOutputStream(uri)?.use { output -> dwgFile.inputStream().use { it.copyTo(output) } }
+            status = "تم إنشاء ملف DWG. افتحه في AutoCAD للتحقق من توافق الرسم."
+        } catch (e: Exception) { status = "تعذر تصدير DWG: " + e.message }
+    }
+
     val kmlSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")) { uri: Uri? ->
         if (uri != null) try {
             val manualNetwork = if (importedKml == null && manholes.isNotEmpty()) DxfKmlImporter.convertManual(manholes, pipes) else null
@@ -286,6 +314,10 @@ private fun ArkanApp() {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { showGeoDialog = true }, modifier = Modifier.weight(1f)) { Text("النقطة المرجعية UTM") }
                     Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("استيراد DXF") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { dwgPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("استيراد DWG") }
+                    Spacer(Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { mode = "PIPE"; pipeStart = null }, modifier = Modifier.weight(1f)) { Text("رسم أنبوب") }
@@ -446,6 +478,7 @@ private fun ArkanApp() {
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 Button(onClick={showKmlDialog=true}) { Text("تصدير KML") }
                 Button(onClick={dxfSaver.launch("ARKAN_Sewer_Network.dxf")}) { Text("تصدير DXF") }
+                Button(onClick={dwgSaver.launch("ARKAN_Sewer_Network.dwg")}) { Text("تصدير DWG") }
                 Button(
                     onClick = {
                         pipes = emptyList()
