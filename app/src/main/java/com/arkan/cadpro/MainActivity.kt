@@ -425,6 +425,40 @@ private fun ArkanApp() {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
             Text("V1.12 • أدوات الرسم CAD الأساسية", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = {
+                        if (cadEntities.isNotEmpty()) {
+                            cadRedo = cadRedo + cadEntities.last()
+                            cadEntities = cadEntities.dropLast(1)
+                            status = "Undo: تم التراجع عن آخر عنصر CAD."
+                        } else status = "لا توجد عناصر CAD للتراجع."
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
+                ) { Text("↶", fontSize = 22.sp) }
+                OutlinedButton(
+                    onClick = {
+                        if (cadRedo.isNotEmpty()) {
+                            cadEntities = cadEntities + cadRedo.last()
+                            cadRedo = cadRedo.dropLast(1)
+                            status = "Redo: تمت إعادة آخر عنصر CAD."
+                        } else status = "لا توجد خطوة لإعادتها."
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
+                ) { Text("↷", fontSize = 22.sp) }
+                Button(
+                    onClick = {
+                        if (referenceEasting.isBlank() || referenceNorthing.isBlank()) {
+                            showGeoDialog = true
+                            status = "أدخل إحداثيات UTM المرجعية أولاً، ثم اضغط SAVE."
+                        } else dxfSaver.launch("ARKAN_DRAWING.dxf")
+                    },
+                    modifier = Modifier.weight(1.5f),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) { Text("▤ SAVE", fontSize = 14.sp) }
+            }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { showGeoDialog = true }, modifier = Modifier.weight(1f)) { Text("النقطة المرجعية UTM") }
@@ -449,10 +483,6 @@ private fun ArkanApp() {
                     }
                     if (showDrawTools) {
                         Text("أدوات الرسم CAD", color = Color(0xFF00C8A0), fontSize = 13.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { if (cadEntities.isNotEmpty()) { cadRedo = cadRedo + cadEntities.last(); cadEntities = cadEntities.dropLast(1); status = "تم التراجع عن آخر عنصر CAD." } else status = "لا توجد عناصر CAD للتراجع." }, modifier = Modifier.weight(1f)) { Text("Undo") }
-                            OutlinedButton(onClick = { if (cadRedo.isNotEmpty()) { cadEntities = cadEntities + cadRedo.last(); cadRedo = cadRedo.dropLast(1); status = "تمت إعادة العنصر CAD." } else status = "لا توجد خطوة لإعادتها." }, modifier = Modifier.weight(1f)) { Text("Redo") }
-                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             listOf("LINE", "POLYLINE", "CIRCLE").forEach { tool ->
                                 OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
