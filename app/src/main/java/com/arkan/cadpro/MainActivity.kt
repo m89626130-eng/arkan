@@ -39,6 +39,7 @@ private const val PX_PER_METER = 40f
 private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Double): Pair<Double, Double> =
     (originEasting + point.x / PX_PER_METER) to (originNorthing - point.y / PX_PER_METER)
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
+private data class CadEntity(val type: String, val points: List<Offset>, val layer: String = "0")
 private data class ImportedPath(val layer: String, val points: List<Pair<Double, Double>>)
 
 private fun pipeLayerColor(layer: String): Color {
@@ -78,6 +79,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ArkanApp() {
     var pipes by remember { mutableStateOf(listOf<Pipe>()) }
+    var cadEntities by remember { mutableStateOf(listOf<CadEntity>()) }
+    var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
     var mode by remember { mutableStateOf("PIPE") }
     var pipeStart by remember { mutableStateOf<Offset?>(null) }
@@ -337,7 +340,7 @@ private fun ArkanApp() {
                 .padding(10.dp)
         ) {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
-            Text("V1.10 • حساب المناهيل والميول تلقائياً", color = Color.LightGray, fontSize = 12.sp)
+            Text("V1.12 • أدوات الرسم CAD الأساسية", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
@@ -351,6 +354,18 @@ private fun ArkanApp() {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { mode = "PIPE"; pipeStart = null }, modifier = Modifier.weight(1f)) { Text("رسم أنبوب") }
                     Button(onClick = { showManholeDialog = true }, modifier = Modifier.weight(1f)) { Text("إضافة منهول") }
+                }
+                Text("أدوات الرسم CAD", color = Color(0xFF00C8A0), fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("LINE", "POLYLINE", "CIRCLE").forEach { tool ->
+                        OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("ARC", "RECTANGLE").forEach { tool ->
+                        OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
+                    }
+                    OutlinedButton(onClick = { if (cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft); status = "تم إنهاء POLYLINE." } else status = "حدد نقطتين على الأقل."; cadDraft = emptyList() }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text("إنهاء", fontSize = 10.sp) }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -376,8 +391,35 @@ private fun ArkanApp() {
             Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
             Canvas(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent) {
-                detectTapGestures { tap ->
+                detectTapGestures(onDoubleTap = {
+                    if (mode == "POLYLINE" && cadDraft.size >= 2) {
+                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft)
+                        cadDraft = emptyList()
+                        status = "تم إنهاء POLYLINE."
+                    }
+                }, onTap = { tap ->
                     when {
+                        mode == "LINE" -> {
+                            if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد نقطة نهاية LINE." }
+                            else { cadEntities = cadEntities + CadEntity("LINE", listOf(cadDraft.first(), tap)); cadDraft = emptyList(); status = "تم رسم LINE." }
+                        }
+                        mode == "POLYLINE" -> {
+                            cadDraft = cadDraft + tap
+                            status = "نقاط POLYLINE: ${cadDraft.size}. انقر مرتين لإنهاء المسار أو استخدم زر إنهاء."
+                        }
+                        mode == "CIRCLE" -> {
+                            if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد نقطة على محيط الدائرة." }
+                            else { cadEntities = cadEntities + CadEntity("CIRCLE", listOf(cadDraft.first(), tap)); cadDraft = emptyList(); status = "تم رسم CIRCLE." }
+                        }
+                        mode == "RECTANGLE" -> {
+                            if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد الركن المقابل للمستطيل." }
+                            else { cadEntities = cadEntities + CadEntity("RECTANGLE", listOf(cadDraft.first(), tap)); cadDraft = emptyList(); status = "تم رسم RECTANGLE." }
+                        }
+                        mode == "ARC" -> {
+                            cadDraft = cadDraft + tap
+                            if (cadDraft.size == 3) { cadEntities = cadEntities + CadEntity("ARC", cadDraft); cadDraft = emptyList(); status = "تم رسم ARC بثلاث نقاط." }
+                            else status = "حدد النقطة ${cadDraft.size + 1} للقوس."
+                        }
                         pendingManhole != null -> {
                             val mh = pendingManhole!!.copy(point = tap)
                             manholes = manholes + mh; mhId = "MH-%02d".format(Locale.US, manholes.size + 1); mhDepth = ""; mhNorthing = ""; mhEasting = ""; mhGroundLevel = ""; mhInvertLevel = ""; pendingManhole = null; status = "تمت إضافة ${mh.id} (${mh.type})"
@@ -411,7 +453,7 @@ private fun ArkanApp() {
                             }
                         }
                     }
-                }
+                })
             }) {
                 for (x in 0..(size.width/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(x*PX_PER_METER,0f), Offset(x*PX_PER_METER,size.height),1f)
                 for (y in 0..(size.height/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(0f,y*PX_PER_METER), Offset(size.width,y*PX_PER_METER),1f)
@@ -438,6 +480,29 @@ private fun ArkanApp() {
                             drawCircle(Color(0xFFFFC857), 7f, p, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f))
                         }
                     }
+                }
+                cadEntities.forEach { entity ->
+                    when (entity.type) {
+                        "LINE" -> if (entity.points.size >= 2) drawLine(Color.White, entity.points[0], entity.points[1], 2f)
+                        "POLYLINE" -> entity.points.zipWithNext().forEach { (a,b) -> drawLine(Color.White, a, b, 2f) }
+                        "CIRCLE" -> if (entity.points.size >= 2) {
+                            val c = entity.points[0]; val edge = entity.points[1]
+                            drawCircle(Color.White, hypot((edge.x-c.x).toDouble(), (edge.y-c.y).toDouble()).toFloat(), c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                        }
+                        "RECTANGLE" -> if (entity.points.size >= 2) {
+                            val a = entity.points[0]; val b = entity.points[1]
+                            drawRect(Color.White, topLeft = Offset(minOf(a.x,b.x), minOf(a.y,b.y)), size = androidx.compose.ui.geometry.Size(kotlin.math.abs(b.x-a.x), kotlin.math.abs(b.y-a.y)), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                        }
+                        "ARC" -> if (entity.points.size == 3) {
+                            val a=entity.points[0]; val m=entity.points[1]; val b=entity.points[2]
+                            val path = androidx.compose.ui.graphics.Path().apply { moveTo(a.x,a.y); quadraticTo(m.x,m.y,b.x,b.y) }
+                            drawPath(path, Color.White, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                        }
+                    }
+                }
+                if (cadDraft.isNotEmpty()) {
+                    cadDraft.zipWithNext().forEach { (a,b) -> drawLine(Color.Yellow, a, b, 2f) }
+                    cadDraft.forEach { drawCircle(Color.Yellow, 4f, it) }
                 }
                 pipes.forEach { pipe ->
                     drawLine(pipeLayerColor(pipe.layer), pipe.a, pipe.b, 5f)
