@@ -23,11 +23,13 @@ internal object LibreDwgRunner {
         return executable
     }
 
-    private fun run(executable: File, input: File, output: File) {
-        // Put options before positional filenames so the converter parses them on Android.
-        val process = ProcessBuilder(
-            executable.absolutePath, "-o", output.absolutePath, "-y", input.absolutePath
-        ).redirectErrorStream(true).start()
+    private fun run(executable: File, input: File, output: File, minimal: Boolean = false) {
+        // LibreDWG accepts -m to emit a minimal DXF containing ENTITIES.
+        // Keep the full conversion as the first attempt; use minimal only as a fallback.
+        val command = mutableListOf(executable.absolutePath)
+        if (minimal) command += "-m"
+        command += listOf("-o", output.absolutePath, "-y", input.absolutePath)
+        val process = ProcessBuilder(command).redirectErrorStream(true).start()
         val log = process.inputStream.bufferedReader().use { it.readText() }
         val exit = process.waitFor()
         check(exit == 0 && output.isFile && output.length() > 0L) {
@@ -41,9 +43,30 @@ internal object LibreDwgRunner {
         context.contentResolver.openInputStream(uri)?.use { source ->
             input.outputStream().use { target -> source.copyTo(target) }
         } ?: error("تعذر قراءة ملف DWG من موفر الملفات.")
+        val executable = converter(context, "dwg2dxf")
         val output = File(context.cacheDir, "converted-$stamp.dxf")
-        run(converter(context, "dwg2dxf"), input, output)
-        return output
+        run(executable, input, output)
+        if (hasEntitiesSection(output)) return output
+
+        // Some DWG files produce an incomplete full DXF from LibreDWG 0.14.
+        // Retry with LibreDWG's documented minimal mode before reporting failure.
+        val minimalOutput = File(context.cacheDir, "converted-$stamp-minimal.dxf")
+        run(executable, input, minimalOutput, minimal = true)
+        check(hasEntitiesSection(minimalOutput)) {
+            "LibreDWG لم يُنتج قسم ENTITIES حتى في الوضع المختصر. " +
+                "ملف DXF الكامل: ${output.length()} بايت، والمختصر: ${minimalOutput.length()} بايت."
+        }
+        return minimalOutput
+    }
+
+    private fun hasEntitiesSection(file: File): Boolean {
+        if (!file.isFile || file.length() == 0L) return false
+        val lines = file.readLines(Charsets.UTF_8).map { it.trim().removePrefix("\uFEFF") }
+        for (i in 0 until lines.size - 3) {
+            if (lines[i] == "0" && lines[i + 1].equals("SECTION", true) &&
+                lines[i + 2] == "2" && lines[i + 3].equals("ENTITIES", true)) return true
+        }
+        return false
     }
 
     fun convertDxfToDwg(context: Context, dxfText: String): File {
