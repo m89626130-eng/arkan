@@ -148,6 +148,7 @@ private fun ArkanApp() {
     var showDrawTools by remember { mutableStateOf(true) }
     var showEditTools by remember { mutableStateOf(true) }
     var showLayerTools by remember { mutableStateOf(true) }
+    var showMeasureTools by remember { mutableStateOf(true) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
     var viewZoom by remember { mutableStateOf(1f) }
@@ -158,6 +159,7 @@ private fun ArkanApp() {
     var cadTextValue by remember { mutableStateOf("Text") }
     var cadStretchVertex by remember { mutableStateOf<Int?>(null) }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
+    var measureDraft by remember { mutableStateOf(listOf<Offset>()) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
     var mode by remember { mutableStateOf("PIPE") }
     var pipeStart by remember { mutableStateOf<Offset?>(null) }
@@ -247,8 +249,7 @@ private fun ArkanApp() {
                         }
                         val dxfText = convertedFile.readText(Charsets.UTF_8)
                         check(dxfText.contains("SECTION", true) && dxfText.contains("ENTITIES", true)) {
-                            "ناتج المحوّل ليس DXF صالحاً أو لا يحتوي قسم ENTITIES."
-                        }
+                            "ناتج المحوّل ليس DXF صالحاً أو لا يحتوي قسم ENTITIES."                        }
                         DxfKmlImporter.convert(dxfText, utmZone.toIntOrNull() ?: 38)
                     }
                     importedKml = converted.kml
@@ -497,8 +498,7 @@ private fun ArkanApp() {
                     }
                     if (showLayerTools) {
                         Text("الطبقات / LAYERS", color = Color(0xFF00C8A0), fontSize = 13.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Box(Modifier.weight(1f)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {                            Box(Modifier.weight(1f)) {
                                 OutlinedButton(onClick = { showLayerMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("الطبقة الحالية: $currentCadLayer") }
                                 DropdownMenu(expanded = showLayerMenu, onDismissRequest = { showLayerMenu = false }) {
                                     cadLayers.forEach { layer -> DropdownMenuItem(text = { Text(layer.name) }, onClick = { currentCadLayer = layer.name; showLayerMenu = false; status = "الطبقة الحالية: ${layer.name}" }) }
@@ -535,6 +535,41 @@ private fun ArkanApp() {
                 }
                 Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("اختيار LSP") }
             }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { showMeasureTools = !showMeasureTools }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (showMeasureTools) "MEASURE  ▾  أدوات القياس" else "MEASURE  ▸  أدوات القياس")
+                }
+                if (showMeasureTools) {
+                    Text("اختر نوع القياس", color = Color(0xFF00C8A0), fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                        listOf("DISTANCE", "AREA").forEach { tool ->
+                            OutlinedButton(onClick = { mode = "MEASURE_$tool"; measureDraft = emptyList(); status = if (tool == "DISTANCE") "المس نقطة البداية ثم نقطة النهاية لقياس المسافة." else "حدد نقاط حدود المساحة، ثم اضغط إنهاء." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                        listOf("ARC LENGTH", "ID POINT").forEach { tool ->
+                            OutlinedButton(onClick = { mode = if (tool == "ARC LENGTH") "MEASURE_ARC_LENGTH" else "MEASURE_ID_POINT"; measureDraft = emptyList(); status = if (tool == "ARC LENGTH") "المس قوس ARC لمعرفة طوله." else "المس نقطة لعرض إحداثياتها." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
+                        }
+                    }
+                    if (mode == "MEASURE_AREA") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = {
+                                if (measureDraft.size >= 3) {
+                                    val twiceArea = measureDraft.indices.sumOf { i ->
+                                        val a = measureDraft[i]; val b = measureDraft[(i + 1) % measureDraft.size]
+                                        (a.x.toDouble() * b.y - b.x.toDouble() * a.y)
+                                    }
+                                    val area = kotlin.math.abs(twiceArea) / 2.0 / (PX_PER_METER * PX_PER_METER)
+                                    val perimeter = measureDraft.zipWithNext().sumOf { (a,b) -> hypot((b.x-a.x).toDouble(),(b.y-a.y).toDouble()) / PX_PER_METER } + hypot((measureDraft.first().x-measureDraft.last().x).toDouble(),(measureDraft.first().y-measureDraft.last().y).toDouble()) / PX_PER_METER
+                                    status = "المساحة = %.3f م² | المحيط = %.3f م".format(Locale.US, area, perimeter)
+                                } else status = "يلزم تحديد ثلاث نقاط على الأقل لحساب المساحة."
+                                measureDraft = emptyList(); mode = "PIPE"
+                            }, modifier = Modifier.weight(1f)) { Text("إنهاء حساب AREA") }
+                            OutlinedButton(onClick = { measureDraft = emptyList(); mode = "PIPE"; status = "تم إلغاء قياس المساحة." }, modifier = Modifier.weight(1f)) { Text("إلغاء") }
+                        }
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(trenchWidth, { trenchWidth = it }, label = { Text("عرض الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
                 OutlinedTextField(trenchDepth, { trenchDepth = it }, label = { Text("عمق الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -542,7 +577,7 @@ private fun ArkanApp() {
             Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp))) {
-            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent) {
+            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {
                         cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft)
@@ -552,6 +587,35 @@ private fun ArkanApp() {
                     }
                 }, onTap = { tap ->
                     when {
+                        mode == "MEASURE_DISTANCE" -> {
+                            if (measureDraft.isEmpty()) { measureDraft = listOf(tap); status = "حدد نقطة النهاية لقياس DISTANCE." }
+                            else {
+                                val first = measureDraft.first()
+                                val length = hypot((tap.x-first.x).toDouble(), (tap.y-first.y).toDouble()) / PX_PER_METER
+                                status = "DISTANCE = %.3f م".format(Locale.US, length)
+                                measureDraft = emptyList(); mode = "PIPE"
+                            }
+                        }
+                        mode == "MEASURE_AREA" -> {
+                            measureDraft = measureDraft + tap
+                            status = "نقاط AREA المحددة: ${measureDraft.size}. حدد ثلاث نقاط أو أكثر ثم اضغط إنهاء."
+                        }
+                        mode == "MEASURE_ARC_LENGTH" -> {
+                            val hit = cadEntities.indices.filter { cadEntities[it].type == "ARC" }.minByOrNull { cadEntityDistance(tap, cadEntities[it]) }
+                            if (hit == null || cadEntityDistance(tap, cadEntities[hit]) > 32f) status = "لم يتم تحديد قوس ARC قريب."
+                            else {
+                                val pts = arcPoints(cadEntities[hit].points, 96)
+                                val length = pts.zipWithNext().sumOf { (a,b) -> hypot((b.x-a.x).toDouble(),(b.y-a.y).toDouble()) } / PX_PER_METER
+                                status = "ARC LENGTH = %.3f م".format(Locale.US, length); mode = "PIPE"
+                            }
+                        }
+                        mode == "MEASURE_ID_POINT" -> {
+                            val x = tap.x / PX_PER_METER; val y = -tap.y / PX_PER_METER
+                            val e0 = referenceEasting.toDoubleOrNull(); val n0 = referenceNorthing.toDoubleOrNull()
+                            status = if (e0 != null && n0 != null) "ID POINT | X = %.3f م | Y = %.3f م | E = %.3f | N = %.3f".format(Locale.US, x, y, e0 + x, n0 + y)
+                                else "ID POINT | X = %.3f م | Y = %.3f م (إحداثيات محلية للرسم)".format(Locale.US, x, y)
+                            mode = "PIPE"
+                        }
                         mode == "TEXT" -> {
                             val value = cadTextValue.trim()
                             if (value.isEmpty()) status = "اكتب النص أولاً."
@@ -747,8 +811,7 @@ private fun ArkanApp() {
                                         val a=entity.points.first(); val b=entity.points.last()
                                         val side=(b.x-a.x)*(tap.y-a.y)-(b.y-a.y)*(tap.x-a.x)
                                         val shifted=offsetCadPoints(entity.points,d*PX_PER_METER,side)
-                                        if(shifted.size>=2) { cadEntities=cadEntities+CadEntity(entity.type,shifted,entity.layer); cadRedo=emptyList(); status="تم إنشاء OFFSET بمقدار $d م." }
-                                        cadEditSelection=null
+                                        if(shifted.size>=2) { cadEntities=cadEntities+CadEntity(entity.type,shifted,entity.layer); cadRedo=emptyList(); status="تم إنشاء OFFSET بمقدار $d م." }                                        cadEditSelection=null
                                     }
                                 } else {
                                     val anchor=entity.points.firstOrNull()
@@ -997,8 +1060,7 @@ private fun ArkanApp() {
                 }
             }
             Text("الطبقة الجديدة ستصبح الطبقة الحالية للرسم.", color = Color.LightGray, fontSize = 11.sp)
-        } },
-        confirmButton = { TextButton(onClick = {
+        } },        confirmButton = { TextButton(onClick = {
             val name = newLayerName.trim()
             when {
                 name.isBlank() -> status = "أدخل اسم الطبقة."
@@ -1247,8 +1309,7 @@ private object ArkanXlsxWriter {
             ArkanXlsxCell("فرق حسابي بين الهندسة ووسوم الأطوال")
         )
         layerRows += listOf(
-            ArkanXlsxCell("مجموع الأطوال المعلنة حسب القطر"),
-            ArkanXlsxCell("", diameterLengths.values.sum(), 3),
+            ArkanXlsxCell("مجموع الأطوال المعلنة حسب القطر"),            ArkanXlsxCell("", diameterLengths.values.sum(), 3),
             ArkanXlsxCell("من أبعاد وأطوال النصوص في DXF")
         )
         layerRows += listOf(ArkanXlsxCell(""))
@@ -1497,8 +1558,7 @@ private object DxfKmlImporter {
 
         // A section starts with 0/SECTION followed by 2/ENTITIES.
         val sectionMarker = pairs.indices.firstOrNull { index ->
-            pairs[index].code == 0 && pairs[index].value.equals("SECTION", true) &&
-                index + 1 < pairs.size && pairs[index + 1].code == 2 &&
+            pairs[index].code == 0 && pairs[index].value.equals("SECTION", true) &&                index + 1 < pairs.size && pairs[index + 1].code == 2 &&
                 pairs[index + 1].value.equals("ENTITIES", true)
         }
         require(sectionMarker != null) {
@@ -1747,8 +1807,7 @@ private object DxfKmlImporter {
                         val found = mutableListOf<Pair<Double, Double>>()
                         var x: Double? = null
                         for (p in e.drop(1)) {
-                            if (p.code == codeX) x = p.value.toDoubleOrNull()
-                            if (p.code == codeY && x != null) {
+                            if (p.code == codeX) x = p.value.toDoubleOrNull()                            if (p.code == codeY && x != null) {
                                 p.value.toDoubleOrNull()?.let { found.add(x!! to it) }
                                 x = null
                             }
