@@ -463,7 +463,7 @@ private fun ArkanApp() {
             OutlinedTextField(mhInvertLevel,{mhInvertLevel=it},label={Text("INV / منسوب قاع الأنبوب (اتركه فارغاً للحساب التلقائي)")},singleLine=true)
             val previewDepth = mhGroundLevel.toDoubleOrNull()?.let { gl -> mhInvertLevel.toDoubleOrNull()?.let { inv -> gl - inv } } ?: 0.0
             val automaticType = when { previewDepth <= 0.0 -> "بانتظار INV"; previewDepth <= 1.70 -> "AS"; previewDepth <= 3.00 -> "BS"; previewDepth <= 4.00 -> "CS"; else -> "CD" }
-            Text("نوع المنهول تلقائي حسب H = GL - INV: $automaticType", color = Color(0xFF00C8A0))
+            OutlinedTextField(value = automaticType, onValueChange = {}, label = { Text("نوع المنهولة (تلقائي)") }, modifier = Modifier.fillMaxWidth(), readOnly = true, singleLine = true)
             OutlinedTextField(targetSlopePercent, { targetSlopePercent = it }, label = { Text("نسبة الميول (%)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Text("أدخل نسبة الميل هنا، مثلاً 0.50 أو 1.00. يستخدمها البرنامج لحساب INV للمنهول التالي تلقائياً حسب طول الأنبوب.", color = Color.LightGray, fontSize = 11.sp)
             Text("أدخل GL لكل منهول. أدخل INV للمنهول الأول؛ ويمكن ترك INV للمناهيل التالية فارغاً ليحسبه البرنامج من نسبة الميل أعلاه. نوع المنهول يُحدد تلقائياً ولا يحتاج اختياراً يدوياً.", color = Color.LightGray, fontSize = 11.sp)
