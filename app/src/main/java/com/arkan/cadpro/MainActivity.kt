@@ -160,6 +160,7 @@ private fun ArkanApp() {
     var viewPanY by remember { mutableStateOf(0f) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadCornerDistance by remember { mutableStateOf("0.25") }
+    var cadScaleFactor by remember { mutableStateOf("2.0") }
     var cadTextValue by remember { mutableStateOf("Text") }
     var cadStretchVertex by remember { mutableStateOf<Int?>(null) }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
@@ -572,13 +573,14 @@ private fun ArkanApp() {
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("FILLET", "CHAMFER").forEach { tool ->
+                            listOf("FILLET", "CHAMFER", "SCALE").forEach { tool ->
                                 OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedTextField(cadOffsetDistance,{cadOffsetDistance=it},label={Text("مسافة OFFSET م")},modifier=Modifier.weight(1f),singleLine=true)
                             OutlinedTextField(cadCornerDistance,{cadCornerDistance=it},label={Text("FILLET R / CHAMFER م")},modifier=Modifier.weight(1f),singleLine=true)
+                            OutlinedTextField(cadScaleFactor,{cadScaleFactor=it},label={Text("SCALE factor")},modifier=Modifier.weight(1f),singleLine=true)
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(onClick = { mode = "TEXT"; cadDraft = emptyList(); status = "اكتب النص ثم المس مكان وضعه على الرسم." }, modifier = Modifier.weight(1f)) { Text("TEXT") }
@@ -788,7 +790,7 @@ private fun ArkanApp() {
                                 status = "تم حذف العنصر."
                             } else status = "لم يتم تحديد عنصر قريب."
                         }
-                        mode in listOf("MOVE","COPY","OFFSET","ROTATE","MIRROR","STRETCH","TRIM","EXTEND","FILLET","CHAMFER") -> {
+                        mode in listOf("MOVE","COPY","OFFSET","ROTATE","MIRROR","SCALE","STRETCH","TRIM","EXTEND","FILLET","CHAMFER") -> {
                             val selected = cadEditSelection
                             val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
                                 ?.takeIf { cadEntityDistance(tap,cadEntities[it]) <= 28f }
@@ -802,6 +804,7 @@ private fun ArkanApp() {
                                         "FILLET", "CHAMFER" -> "تم تحديد الخط الأول. اختر الخط الثاني."
                                         "ROTATE" -> "تم تحديد العنصر. حدد مركز الدوران ثم نقطة البداية ثم نقطة النهاية للزاوية."
                                         "MIRROR" -> "تم تحديد العنصر. حدد نقطتي محور الانعكاس."
+                                        "SCALE" -> "تم تحديد العنصر. حدد نقطة الارتكاز لتغيير الحجم."
                                         "STRETCH" -> "تم تحديد العنصر. اختر الرأس/النقطة التي تريد تحريكها."
                                         else -> "تم تحديد ${cadEntities[hit].type}. حدد نقطة/جهة التنفيذ."
                                     }
@@ -955,6 +958,25 @@ private fun ArkanApp() {
                                             cadDraft = emptyList()
                                             status = "تم تنفيذ MIRROR مع الاحتفاظ بالعنصر الأصلي."
                                         }
+                                    }
+                                } else if (mode == "SCALE") {
+                                    val factor = cadScaleFactor.toFloatOrNull()
+                                    if (factor == null || factor <= 0f || !factor.isFinite()) {
+                                        status = "أدخل معامل SCALE موجباً مثل 2 أو 0.5."
+                                        cadEditSelection = null
+                                    } else if (cadDraft.isEmpty()) {
+                                        cadDraft = listOf(tap)
+                                        status = "تم تحديد نقطة الارتكاز؛ جارٍ تغيير حجم العنصر."
+                                    } else {
+                                        val base = cadDraft.first()
+                                        val scaled = entity.copy(points = entity.points.map { p ->
+                                            Offset(base.x + (p.x - base.x) * factor, base.y + (p.y - base.y) * factor)
+                                        })
+                                        cadEntities = cadEntities.toMutableList().also { it[selected] = scaled }
+                                        cadRedo = emptyList()
+                                        cadEditSelection = null
+                                        cadDraft = emptyList()
+                                        status = "تم تنفيذ SCALE بمعامل ${factor}."
                                     }
                                 } else if (mode == "ROTATE") {
                                     if (cadDraft.size < 2) {
