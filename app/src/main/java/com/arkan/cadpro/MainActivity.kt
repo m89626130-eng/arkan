@@ -762,6 +762,33 @@ private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, originEast
         pair(10, ax); pair(20, ay); pair(30, 0)
         pair(11, bx); pair(21, by); pair(31, 0)
     }
+    cadEntities.forEach { cad ->
+        val pts = when (cad.type) {
+            "ARC" -> arcPoints(cad.points)
+            "RECTANGLE" -> if (cad.points.size >= 2) {
+                val a = cad.points[0]; val b = cad.points[1]
+                listOf(Offset(minOf(a.x,b.x),minOf(a.y,b.y)), Offset(maxOf(a.x,b.x),minOf(a.y,b.y)), Offset(maxOf(a.x,b.x),maxOf(a.y,b.y)), Offset(minOf(a.x,b.x),maxOf(a.y,b.y)))
+            } else emptyList()
+            else -> cad.points
+        }
+        when (cad.type) {
+            "LINE" -> if (pts.size >= 2) {
+                entity("LINE", cad.layer)
+                val (x1,y1)=localToUtm(pts[0],originEasting,originNorthing)
+                val (x2,y2)=localToUtm(pts[1],originEasting,originNorthing)
+                pair(10,x1); pair(20,y1); pair(30,0); pair(11,x2); pair(21,y2); pair(31,0)
+            }
+            "CIRCLE" -> if (pts.size >= 2) {
+                val (x,y)=localToUtm(pts[0],originEasting,originNorthing)
+                val radius=hypot((pts[1].x-pts[0].x).toDouble(),(pts[1].y-pts[0].y).toDouble())/PX_PER_METER
+                entity("CIRCLE",cad.layer); pair(10,x); pair(20,y); pair(30,0); pair(40,radius)
+            }
+            "POLYLINE","RECTANGLE","ARC" -> if (pts.size >= 2) {
+                entity("LWPOLYLINE",cad.layer); pair(90,pts.size); pair(70,if(cad.type=="RECTANGLE") 1 else 0)
+                pts.forEach { p -> val (x,y)=localToUtm(p,originEasting,originNorthing); pair(10,x); pair(20,y) }
+            }
+        }
+    }
     manholes.forEach { mh ->
         val (x, y) = localToUtm(mh.point, originEasting, originNorthing)
         if (mh.isCircular) {
