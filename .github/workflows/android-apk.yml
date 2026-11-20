@@ -53,10 +53,10 @@ jobs:
           test -n "$DXF2DWG" && test -s "$DXF2DWG"
           cp "$DWG2DXF" app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so
           cp "$DXF2DWG" app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
-          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" app/src/main/lib/arm64-v8a/libdwg2dxf.so app/src/main/lib/arm64-v8a/libdxf2dwg.so
-          file app/src/main/assets/dwg/arm64-v8a/dwg2dxf app/src/main/assets/dwg/arm64-v8a/dxf2dwg
-          test -s app/src/main/assets/dwg/arm64-v8a/dwg2dxf
-          test -s app/src/main/assets/dwg/arm64-v8a/dxf2dwg
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
+          file app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
+          test -s app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so
+          test -s app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
@@ -66,37 +66,10 @@ jobs:
       - name: Verify DWG tools are packaged in APK
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
-          unzip -l "$APK" | grep -E 'lib/arm64-v8a/lib(dwg2dxf|dxf2dwg)\.so
+          unzip -l "$APK" | grep -E 'lib/arm64-v8a/lib(dwg2dxf|dxf2dwg)\\.so$'
           mkdir -p "$RUNNER_TEMP/dwg-verify"
-          unzip -p "$APK" assets/dwg/arm64-v8a/dwg2dxf > "$RUNNER_TEMP/dwg-verify/dwg2dxf"
-          unzip -p "$APK" assets/dwg/arm64-v8a/dxf2dwg > "$RUNNER_TEMP/dwg-verify/dxf2dwg"
-          test -s "$RUNNER_TEMP/dwg-verify/dwg2dxf"
-          test -s "$RUNNER_TEMP/dwg-verify/dxf2dwg"
-      - name: Sign APK with permanent ARKAN key
-        env:
-          ARKAN_KEYSTORE_BASE64: ${{ secrets.ARKAN_KEYSTORE_BASE64 }}
-          ARKAN_KEYSTORE_PASSWORD: ${{ secrets.ARKAN_KEYSTORE_PASSWORD }}
-          ARKAN_KEY_ALIAS: ${{ secrets.ARKAN_KEY_ALIAS }}
-        run: |
-          test -n "$ARKAN_KEYSTORE_BASE64" || (echo "Missing ARKAN_KEYSTORE_BASE64 secret" && exit 1)
-          test -n "$ARKAN_KEYSTORE_PASSWORD" || (echo "Missing ARKAN_KEYSTORE_PASSWORD secret" && exit 1)
-          test -n "$ARKAN_KEY_ALIAS" || (echo "Missing ARKAN_KEY_ALIAS secret" && exit 1)
-          echo "$ARKAN_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/arkan-release.jks"
-          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
-          "$BUILD_TOOLS/zipalign" -f 4 app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/arkan-aligned.apk"
-          "$BUILD_TOOLS/apksigner" sign --ks "$RUNNER_TEMP/arkan-release.jks" --ks-key-alias "$ARKAN_KEY_ALIAS" --ks-pass env:ARKAN_KEYSTORE_PASSWORD --key-pass env:ARKAN_KEYSTORE_PASSWORD --out app/build/outputs/apk/debug/ARKAN-CAD-PRO.apk "$RUNNER_TEMP/arkan-aligned.apk"
-          "$BUILD_TOOLS/apksigner" verify --verbose app/build/outputs/apk/debug/ARKAN-CAD-PRO.apk
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ARKAN-CAD-PRO-stable-signed-apk
-          path: app/build/outputs/apk/debug/ARKAN-CAD-PRO.apk
-          if-no-files-found: error
-          retention-days: 7
-
-          mkdir -p "$RUNNER_TEMP/dwg-verify"
-          unzip -p "$APK" assets/dwg/arm64-v8a/dwg2dxf > "$RUNNER_TEMP/dwg-verify/dwg2dxf"
-          unzip -p "$APK" assets/dwg/arm64-v8a/dxf2dwg > "$RUNNER_TEMP/dwg-verify/dxf2dwg"
+          unzip -p "$APK" lib/arm64-v8a/libdwg2dxf.so > "$RUNNER_TEMP/dwg-verify/dwg2dxf"
+          unzip -p "$APK" lib/arm64-v8a/libdxf2dwg.so > "$RUNNER_TEMP/dwg-verify/dxf2dwg"
           test -s "$RUNNER_TEMP/dwg-verify/dwg2dxf"
           test -s "$RUNNER_TEMP/dwg-verify/dxf2dwg"
       - name: Sign APK with permanent ARKAN key
