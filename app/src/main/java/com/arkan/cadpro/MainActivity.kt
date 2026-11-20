@@ -1251,6 +1251,94 @@ private object DxfKmlImporter {
         entities.clear()
         entities.addAll(expandedEntities)
 
+        // Expand ordinary DXF block references (INSERT) so drawings made from
+        // reusable symbols are visible in the plan view, not silently discarded.
+        data class BlockDefinition(val baseX: Double, val baseY: Double, val records: List<List<PairCode>>)
+        val blockDefinitions = mutableMapOf<String, BlockDefinition>()
+        val blocksSection = pairs.indices.firstOrNull { index ->
+            pairs[index].code == 0 && pairs[index].value.equals("SECTION", true) &&
+                index + 1 < pairs.size && pairs[index + 1].code == 2 &&
+                pairs[index + 1].value.equals("BLOCKS", true)
+        }
+        if (blocksSection != null) {
+            var cursor = blocksSection + 2
+            while (cursor < pairs.size && !(pairs[cursor].code == 0 && pairs[cursor].value.equals("ENDSEC", true))) {
+                if (pairs[cursor].code != 0 || !pairs[cursor].value.equals("BLOCK", true)) {
+                    cursor++
+                    continue
+                }
+                val headerStart = cursor
+                cursor++
+                val header = mutableListOf<PairCode>()
+                while (cursor < pairs.size && pairs[cursor].code != 0) header.add(pairs[cursor++])
+                val blockName = header.firstOrNull { it.code == 2 }?.value.orEmpty()
+                val baseX = header.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: 0.0
+                val baseY = header.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: 0.0
+                val records = mutableListOf<List<PairCode>>()
+                var record = mutableListOf<PairCode>()
+                while (cursor < pairs.size &&
+                    !(pairs[cursor].code == 0 && pairs[cursor].value.equals("ENDBLK", true))) {
+                    val item = pairs[cursor++]
+                    if (item.code == 0) {
+                        if (record.isNotEmpty()) records.add(record)
+                        record = mutableListOf(item)
+                    } else if (record.isNotEmpty()) record.add(item)
+                }
+                if (record.isNotEmpty()) records.add(record)
+                if (blockName.isNotBlank()) blockDefinitions[blockName.uppercase(Locale.ROOT)] =
+                    BlockDefinition(baseX, baseY, records.filter { rec ->
+                        rec.firstOrNull()?.value?.uppercase(Locale.ROOT) in
+                            setOf("LINE", "LWPOLYLINE", "POLYLINE", "CIRCLE", "ARC", "ELLIPSE", "SPLINE", "POINT", "SOLID", "TRACE", "3DFACE")
+                    })
+                if (cursor < pairs.size) cursor++ // ENDBLK
+                if (cursor == headerStart) cursor++
+            }
+        }
+        val expandedBlocks = mutableListOf<List<PairCode>>()
+        entities.filter { it.firstOrNull()?.value.equals("INSERT", true) }.forEach { insert ->
+            val blockName = insert.firstOrNull { it.code == 2 }?.value?.uppercase(Locale.ROOT) ?: return@forEach
+            val definition = blockDefinitions[blockName] ?: return@forEach
+            val tx = insert.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: 0.0
+            val ty = insert.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: 0.0
+            val sx = insert.firstOrNull { it.code == 41 }?.value?.toDoubleOrNull() ?: 1.0
+            val sy = insert.firstOrNull { it.code == 42 }?.value?.toDoubleOrNull() ?: 1.0
+            val angle = Math.toRadians(insert.firstOrNull { it.code == 50 }?.value?.toDoubleOrNull() ?: 0.0)
+            val cs = kotlin.math.cos(angle)
+            val sn = kotlin.math.sin(angle)
+            val insertLayer = insert.firstOrNull { it.code == 8 }?.value ?: "0"
+            definition.records.forEach { child ->
+                val childType = child.firstOrNull()?.value?.uppercase(Locale.ROOT) ?: return@forEach
+                val coordinateCodes = mapOf(10 to 20, 11 to 21, 12 to 22, 13 to 23, 14 to 24)
+                val transformed = child.map { pair ->
+                    val yCode = coordinateCodes[pair.code]
+                    if (yCode == null) pair else {
+                        val x = pair.value.toDoubleOrNull()
+                        val y = child.firstOrNull { it.code == yCode }?.value?.toDoubleOrNull()
+                        if (x == null || y == null) pair else {
+                            val localX = (x - definition.baseX) * sx
+                            val localY = (y - definition.baseY) * sy
+                            PairCode(pair.code, (tx + localX * cs - localY * sn).toString())
+                        }
+                    }
+                }.map { pair ->
+                    val xCode = coordinateCodes.entries.firstOrNull { it.value == pair.code }?.key
+                    if (xCode == null) pair else {
+                        val x = child.firstOrNull { it.code == xCode }?.value?.toDoubleOrNull()
+                        val y = pair.value.toDoubleOrNull()
+                        if (x == null || y == null) pair else {
+                            val localX = (x - definition.baseX) * sx
+                            val localY = (y - definition.baseY) * sy
+                            PairCode(pair.code, (ty + localX * sn + localY * cs).toString())
+                        }
+                    }
+                }.map { pair ->
+                    if (pair.code == 8 && pair.value == "0") PairCode(8, insertLayer) else pair
+                }
+                expandedBlocks.add(listOf(PairCode(0, childType)) + transformed.drop(1))
+            }
+        }
+        entities.addAll(expandedBlocks)
+
         val placemarks = StringBuilder()
         var pipeCount = 0
         val layerLengths = mutableMapOf<String, Double>()
