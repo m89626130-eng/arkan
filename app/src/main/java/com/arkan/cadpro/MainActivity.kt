@@ -1097,6 +1097,7 @@ private fun ArkanApp() {
                     "ANNOTATION" -> listOf("TEXT" to "T", "DIMENSION" to "↔")
                     "SEWER NETWORK" -> listOf("PIPE" to "━", "MANHOLE" to "◉", "DIAMETER" to "Ø", "SLOPE" to "%")
                     "EXPORT" -> listOf("CSV" to "▦", "PDF" to "▤", "KML" to "◎", "DXF" to "⌘", "DWG" to "▧")
+                    else -> emptyList()
                 }
                 commandItems.forEach { (tool, icon) ->
                     CadPaletteButton(icon, tool, {
