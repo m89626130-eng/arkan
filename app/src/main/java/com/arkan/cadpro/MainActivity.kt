@@ -36,6 +36,7 @@ private const val PX_PER_METER = 40f
 private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Double): Pair<Double, Double> =
     (originEasting + point.x / PX_PER_METER) to (originNorthing - point.y / PX_PER_METER)
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
+private data class ImportedPath(val layer: String, val points: List<Pair<Double, Double>>)
 
 private fun pipeLayerColor(layer: String): Color {
     val key = layer.trim().uppercase(Locale.ROOT)
@@ -95,6 +96,7 @@ private fun ArkanApp() {
     var importedLayerLengths by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var importedManholeCount by remember { mutableStateOf(0) }
     var importedManholes by remember { mutableStateOf(listOf<Manhole>()) }
+    var importedPaths by remember { mutableStateOf(listOf<ImportedPath>()) }
     var importedDiameterLengths by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
     var importedUnclassifiedGeometryLength by remember { mutableStateOf(0.0) }
     var longitude by remember { mutableStateOf("46.257") }
@@ -133,6 +135,7 @@ private fun ArkanApp() {
                 importedLayerLengths = converted.layerLengths
                 importedManholeCount = converted.manholeCount
                 importedManholes = converted.manholes
+                importedPaths = converted.paths
                 importedDiameterLengths = converted.diameterLengths
                 importedUnclassifiedGeometryLength = converted.unclassifiedGeometryLength
                 dxfFileName = uri.lastPathSegment ?: "DXF"
@@ -150,6 +153,7 @@ private fun ArkanApp() {
             importedLayerLengths = converted.layerLengths
             importedManholeCount = converted.manholeCount
             importedManholes = converted.manholes
+            importedPaths = converted.paths
             importedDiameterLengths = converted.diameterLengths
             importedUnclassifiedGeometryLength = converted.unclassifiedGeometryLength
             dxfFileName = uri.lastPathSegment ?: "DWG"
@@ -386,6 +390,30 @@ private fun ArkanApp() {
             }) {
                 for (x in 0..(size.width/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(x*PX_PER_METER,0f), Offset(x*PX_PER_METER,size.height),1f)
                 for (y in 0..(size.height/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(0f,y*PX_PER_METER), Offset(size.width,y*PX_PER_METER),1f)
+                if (importedKml != null && (importedPaths.isNotEmpty() || importedManholes.isNotEmpty())) {
+                    val allCoords = importedPaths.flatMap { it.points } + importedManholes.map { it.easting to it.northing }
+                    if (allCoords.isNotEmpty()) {
+                        val minE = allCoords.minOf { it.first }
+                        val maxE = allCoords.maxOf { it.first }
+                        val minN = allCoords.minOf { it.second }
+                        val maxN = allCoords.maxOf { it.second }
+                        val spanE = (maxE - minE).coerceAtLeast(0.01)
+                        val spanN = (maxN - minN).coerceAtLeast(0.01)
+                        val fit = minOf((size.width - 36f) / spanE.toFloat(), (size.height - 36f) / spanN.toFloat()).coerceAtLeast(0.0001f)
+                        val offsetX = (size.width - spanE.toFloat() * fit) / 2f
+                        val offsetY = (size.height - spanN.toFloat() * fit) / 2f
+                        fun screenPoint(e: Double, n: Double) = Offset(offsetX + ((e - minE) * fit).toFloat(), offsetY + ((maxN - n) * fit).toFloat())
+                        importedPaths.forEach { path ->
+                            path.points.zipWithNext().forEach { (a, b) ->
+                                drawLine(pipeLayerColor(path.layer), screenPoint(a.first, a.second), screenPoint(b.first, b.second), 4f)
+                            }
+                        }
+                        importedManholes.forEach { mh ->
+                            val p = screenPoint(mh.easting, mh.northing)
+                            drawCircle(Color(0xFFFFC857), 7f, p, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f))
+                        }
+                    }
+                }
                 pipes.forEach { pipe ->
                     drawLine(pipeLayerColor(pipe.layer), pipe.a, pipe.b, 5f)
                     drawCircle(Color.White, 4f, pipe.a)
@@ -490,6 +518,7 @@ private fun ArkanApp() {
                         importedLayerLengths = emptyMap()
                         importedManholeCount = 0
                         importedManholes = emptyList()
+                        importedPaths = emptyList()
                         importedDiameterLengths = emptyMap()
                         importedUnclassifiedGeometryLength = 0.0
                         dxfFileName = "لم يتم اختيار DXF"
@@ -875,6 +904,7 @@ private object DxfKmlImporter {
         val layerLengths: Map<String, Double>,
         val manholeCount: Int,
         val manholes: List<Manhole>,
+        val paths: List<ImportedPath>,
         val diameterLengths: Map<Int, Double>,
         val unclassifiedGeometryLength: Double
     )
@@ -935,6 +965,7 @@ private object DxfKmlImporter {
         val placemarks = StringBuilder()
         var pipeCount = 0
         val layerLengths = mutableMapOf<String, Double>()
+        val importedPaths = mutableListOf<ImportedPath>()
         val structurePositions = entities.filter { it.firstOrNull()?.value == "INSERT" && it.firstOrNull { p -> p.code == 8 }?.value == "C-SSWR-STRC" }.mapNotNull { e ->
             val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
             val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
@@ -992,6 +1023,7 @@ private object DxfKmlImporter {
                 if (pts.size >= 2) {
                     val length = pts.zipWithNext().sumOf { (a, b) -> hypot(b.first - a.first, b.second - a.second) }
                     layerLengths[layer] = (layerLengths[layer] ?: 0.0) + length
+                    importedPaths += ImportedPath(layer, pts.toList())
                     val coords = pts.joinToString(" ") { (east, north) ->
                         val g = utmToWgs84(east, north, 0.0)
                         "${fmt(g.lon)},${fmt(g.lat)},${fmt(g.alt)}"
@@ -1013,6 +1045,7 @@ private object DxfKmlImporter {
             layerLengths,
             mhCount,
             importedManholes,
+            importedPaths,
             diameterLengths,
             unclassifiedGeometryLength
         )
