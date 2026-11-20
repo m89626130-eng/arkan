@@ -978,26 +978,49 @@ private object DxfKmlImporter {
     }
 
     fun convert(raw: String): ImportResult {
-        val lines = raw.replace("\r", "").lines()
+        // DXF is a sequence of group-code/value lines. Be tolerant of BOM,
+        // CRLF/LF, blank lines and malformed records instead of losing pair alignment.
+        val normalized = raw.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n')
+        val lines = normalized.split('\n')
         val pairs = mutableListOf<PairCode>()
         var i = 0
-        while (i + 1 < lines.size) {
-            val code = lines[i].trim().toIntOrNull()
-            if (code != null) pairs.add(PairCode(code, lines[i + 1].trim()))
-            i += 2
+        while (i < lines.size) {
+            val code = lines[i].trim().removePrefix("\uFEFF").toIntOrNull()
+            if (code == null || i + 1 >= lines.size) {
+                i++
+            } else {
+                pairs += PairCode(code, lines[i + 1].trim())
+                i += 2
+            }
         }
-        val start = pairs.indexOfFirst { it.code == 2 && it.value.equals("ENTITIES", true) }
-        require(start >= 0) { "قسم ENTITIES غير موجود" }
+
+        // A section starts with 0/SECTION followed by 2/ENTITIES.
+        val sectionMarker = pairs.indices.firstOrNull { index ->
+            pairs[index].code == 0 && pairs[index].value.equals("SECTION", true) &&
+                index + 1 < pairs.size && pairs[index + 1].code == 2 &&
+                pairs[index + 1].value.equals("ENTITIES", true)
+        }
+        require(sectionMarker != null) {
+            val preview = normalized.take(100).replace("\n", " ").replace("\t", " ")
+            "تعذر العثور على قسم ENTITIES في DXF النصي. بداية الملف: $preview"
+        }
+
         val entities = mutableListOf<List<PairCode>>()
         var current = mutableListOf<PairCode>()
-        for (p in pairs.drop(start + 1)) {
+        var inEntities = false
+        for (p in pairs.drop(sectionMarker + 2)) {
+            if (!inEntities) inEntities = true
+            if (p.code == 0 && p.value.equals("ENDSEC", true)) {
+                if (current.isNotEmpty()) entities.add(current)
+                break
+            }
             if (p.code == 0) {
                 if (current.isNotEmpty()) entities.add(current)
                 current = mutableListOf(p)
-                if (p.value == "ENDSEC") break
-            } else current.add(p)
+            } else if (inEntities) {
+                current.add(p)
+            }
         }
-        if (current.isNotEmpty() && current.firstOrNull()?.value != "ENDSEC") entities.add(current)
         val placemarks = StringBuilder()
         var pipeCount = 0
         val layerLengths = mutableMapOf<String, Double>()
