@@ -93,6 +93,8 @@ private fun arcPoints(points: List<Offset>, steps: Int = 48): List<Offset> {
     return (0..steps).map { i -> val angle=start+sweep*i/steps; Offset((cx+radius*cos(angle)).toFloat(),(cy+radius*sin(angle)).toFloat()) }
 }
 private data class ImportedPath(val layer: String, val points: List<Pair<Double, Double>>)
+private fun isPipeLayerName(layer: String): Boolean =
+    Regex("(?i)(PIPE|SEWER|SWR|SSWR|DRAIN|STORM|RAIN|WASTE|GRAVITY|250|315|400|500|600|700|مجرى|انبوب|أنبوب|صرف|مجاري|امطار|أمطار)").containsMatchIn(layer)
 
 private fun pipeLayerColor(layer: String): Color {
     val key = layer.trim().uppercase(Locale.ROOT)
@@ -1343,6 +1345,13 @@ private object DxfKmlImporter {
         var pipeCount = 0
         val layerLengths = mutableMapOf<String, Double>()
         val importedPaths = mutableListOf<ImportedPath>()
+        // Use named pipe layers to exclude site boundaries and decorative geometry from pipe quantities.
+        val hasNamedPipeLayers = entities.any { entity ->
+            val type = entity.firstOrNull()?.value?.uppercase(Locale.ROOT) ?: ""
+            val layerName = entity.firstOrNull { it.code == 8 }?.value.orEmpty()
+            type in setOf("LINE", "LWPOLYLINE", "POLYLINE", "CIRCLE", "ARC", "SPLINE", "ELLIPSE") &&
+                isPipeLayerName(layerName)
+        }
         val structurePositions = entities.filter { e ->
             val block = e.firstOrNull { it.code == 2 }?.value.orEmpty()
             val layer = e.firstOrNull { it.code == 8 }?.value.orEmpty()
@@ -1469,14 +1478,17 @@ private object DxfKmlImporter {
                 }
                 if (pts.size >= 2) {
                     val length = pts.zipWithNext().sumOf { (a, b) -> hypot(b.first - a.first, b.second - a.second) }
-                    layerLengths[layer] = (layerLengths[layer] ?: 0.0) + length
-                    importedPaths += ImportedPath(layer, pts.toList())
-                    val coords = pts.joinToString(" ") { (east, north) ->
-                        val g = utmToWgs84(east, north, 0.0, zone)
-                        "${fmt(g.lon)},${fmt(g.lat)},${fmt(g.alt)}"
+                    val isPipeGeometry = !hasNamedPipeLayers || isPipeLayerName(layer)
+                    if (isPipeGeometry && length.isFinite() && length > 0.0 && length < 100000000.0) {
+                        layerLengths[layer] = (layerLengths[layer] ?: 0.0) + length
+                        importedPaths += ImportedPath(layer, pts.toList())
+                        val coords = pts.joinToString(" ") { (east, north) ->
+                            val g = utmToWgs84(east, north, 0.0, zone)
+                            "${fmt(g.lon)},${fmt(g.lat)},${fmt(g.alt)}"
+                        }
+                        pipeCount++
+                        placemarks.append("<Placemark><name>Sewer pipe $pipeCount</name><Style><LineStyle><color>ff00ffff</color><width>3</width></LineStyle></Style><LineString><tessellate>1</tessellate><coordinates>$coords</coordinates></LineString></Placemark>")
                     }
-                    pipeCount++
-                    placemarks.append("<Placemark><name>Sewer pipe $pipeCount</name><Style><LineStyle><color>ff00ffff</color><width>3</width></LineStyle></Style><LineString><tessellate>1</tessellate><coordinates>$coords</coordinates></LineString></Placemark>")
                 }
             }
         }
