@@ -995,7 +995,8 @@ private fun ArkanApp() {
                             val denom=hypot(ax.toDouble(),ay.toDouble())*hypot(bx.toDouble(),by.toDouble())
                             val angle=if(denom>0.0) Math.acos(((ax*bx+ay*by)/denom).coerceIn(-1.0,1.0))*180.0/Math.PI else 0.0
                             drawLine(entityColor,v,a,2f); drawLine(entityColor,v,b,2f)
-                            val paint=Paint().apply { color=entityColor.toArgb(); textSize=15f; isAntiAlias=true }                            drawContext.canvas.nativeCanvas.drawText("%.1f°".format(Locale.US,angle),(v.x+a.x+b.x)/3f,(v.y+a.y+b.y)/3f,paint)
+                            val paint=Paint().apply { color=entityColor.toArgb(); textSize=15f; isAntiAlias=true }
+                            drawContext.canvas.nativeCanvas.drawText("%.1f°".format(Locale.US,angle),(v.x+a.x+b.x)/3f,(v.y+a.y+b.y)/3f,paint)
                         }
                         "TEXT" -> if (entity.points.isNotEmpty()) {
                             val paint = Paint().apply { color = entityColor.toArgb(); textSize = 16f; isAntiAlias = true }
@@ -1494,7 +1495,8 @@ private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, cadEntitie
         }
         entity("TEXT", "MANHOLE-LABELS")
         pair(10, x); pair(20, y + 0.45); pair(30, 0); pair(40, 0.20); pair(1, mh.id)
-    }    pair(0, "ENDSEC"); pair(0, "EOF")
+    }
+    pair(0, "ENDSEC"); pair(0, "EOF")
     return out.toString()
 }
 
@@ -1993,7 +1995,8 @@ private object DxfKmlImporter {
             // Only associate nearby annotation labels; never reuse a distant label for every manhole.
             val nearestStructure = labels.filter { it.text.contains("STRUCTURE", true) }
                 .map { it to hypot(it.east - pos.east, it.north - pos.north) }
-                .filter { it.second <= 8.0 }.minByOrNull { it.second }?.first            val nearestDepth = labels.filter { Regex("""(?i)h\s*:\s*[-+]?\d+(?:\.\d+)?""").containsMatchIn(it.text) }
+                .filter { it.second <= 8.0 }.minByOrNull { it.second }?.first
+            val nearestDepth = labels.filter { Regex("""(?i)h\s*:\s*[-+]?\d+(?:\.\d+)?""").containsMatchIn(it.text) }
                 .map { it to hypot(it.east - pos.east, it.north - pos.north) }
                 .filter { it.second <= 8.0 }.minByOrNull { it.second }?.first
             val extractedId = nearestStructure?.text?.let { Regex("""\(([^)]+)\)""").find(it)?.groupValues?.getOrNull(1) }
