@@ -67,8 +67,11 @@ jobs:
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           unzip -l "$APK" | grep -E 'assets/dwg/arm64-v8a/(dwg2dxf|dxf2dwg)$'
-          unzip -p "$APK" assets/dwg/arm64-v8a/dwg2dxf | test -s /dev/stdin
-          unzip -p "$APK" assets/dwg/arm64-v8a/dxf2dwg | test -s /dev/stdin
+          mkdir -p "$RUNNER_TEMP/dwg-verify"
+          unzip -p "$APK" assets/dwg/arm64-v8a/dwg2dxf > "$RUNNER_TEMP/dwg-verify/dwg2dxf"
+          unzip -p "$APK" assets/dwg/arm64-v8a/dxf2dwg > "$RUNNER_TEMP/dwg-verify/dxf2dwg"
+          test -s "$RUNNER_TEMP/dwg-verify/dwg2dxf"
+          test -s "$RUNNER_TEMP/dwg-verify/dxf2dwg"
       - name: Sign APK with permanent ARKAN key
         env:
           ARKAN_KEYSTORE_BASE64: ${{ secrets.ARKAN_KEYSTORE_BASE64 }}
