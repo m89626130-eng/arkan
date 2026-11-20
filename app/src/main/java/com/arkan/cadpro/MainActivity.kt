@@ -1065,12 +1065,12 @@ private object DxfKmlImporter {
             DxfPosition(east, north, alt)
         }
         val labels = entities.filter { e ->
-            val type = e.firstOrNull()?.value
-            (type.equals("TEXT", true) || type.equals("MTEXT", true))
+            val type = e.firstOrNull()?.value.orEmpty().uppercase(Locale.ROOT)
+            type == "TEXT" || type == "MTEXT"
         }.mapNotNull { e ->
             val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
             val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
-            val labelText = e.firstOrNull { it.code == 1 }?.value ?: e.firstOrNull { it.code == 3 }?.value ?: return@mapNotNull null
+            val labelText = e.filter { it.code == 3 || it.code == 1 }.joinToString("") { it.value }.ifBlank { return@mapNotNull null }
             DxfLabel(east, north, labelText)
         }
         val pipeLabelPattern = Regex("""(?i)(\d+(?:\.\d+)?)\s*m\s+of\s+(\d+)\s*mm\b.*\bpipe\b""")
@@ -1084,10 +1084,13 @@ private object DxfKmlImporter {
             }
         }
         val importedManholes = structurePositions.mapIndexed { index, pos ->
+            // Only associate nearby annotation labels; never reuse a distant label for every manhole.
             val nearestStructure = labels.filter { it.text.contains("STRUCTURE", true) }
-                .minByOrNull { hypot(it.east - pos.east, it.north - pos.north) }
+                .map { it to hypot(it.east - pos.east, it.north - pos.north) }
+                .filter { it.second <= 8.0 }.minByOrNull { it.second }?.first
             val nearestDepth = labels.filter { Regex("""(?i)h\s*:\s*[-+]?\d+(?:\.\d+)?""").containsMatchIn(it.text) }
-                .minByOrNull { hypot(it.east - pos.east, it.north - pos.north) }
+                .map { it to hypot(it.east - pos.east, it.north - pos.north) }
+                .filter { it.second <= 8.0 }.minByOrNull { it.second }?.first
             val extractedId = nearestStructure?.text?.let { Regex("""\(([^)]+)\)""").find(it)?.groupValues?.getOrNull(1) }
             val extractedDepth = nearestDepth?.text?.let { Regex("""(?i)h\s*:\s*([-+]?\d+(?:\.\d+)?)""").find(it)?.groupValues?.getOrNull(1)?.toDoubleOrNull() } ?: 0.0
             Manhole(extractedId?.let { "MH-$it" } ?: "MH-%02d".format(Locale.US, index + 1), Offset.Zero, extractedDepth, if (extractedDepth >= 1.70) 0.7318 else 1.10, if (extractedDepth >= 1.70) 0.7318 else 0.70, pos.north, pos.east, pos.alt, coordinatesKnown = false)
@@ -1099,7 +1102,7 @@ private object DxfKmlImporter {
         }
         val mhCount = importedManholes.size
         for (e in entities) {
-            val type = e.firstOrNull()?.value ?: continue
+            val type = e.firstOrNull()?.value?.uppercase(Locale.ROOT) ?: continue
             val layer = e.firstOrNull { it.code == 8 }?.value ?: ""
             if (type.equals("LINE", true) || type.equals("LWPOLYLINE", true) || type.equals("POLYLINE", true) || type.equals("CIRCLE", true) || type.equals("ARC", true) || type.equals("SPLINE", true) || type.equals("ELLIPSE", true)) {
                 val pts = mutableListOf<Pair<Double, Double>>()
@@ -1114,8 +1117,8 @@ private object DxfKmlImporter {
                     val cy = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull()
                     val radius = e.firstOrNull { it.code == 40 }?.value?.toDoubleOrNull()
                     if (cx != null && cy != null && radius != null && radius > 0.0) {
-                        val startAngle = if (type == "ARC") e.firstOrNull { it.code == 50 }?.value?.toDoubleOrNull() ?: 0.0 else 0.0
-                        val endAngle = if (type == "ARC") e.firstOrNull { it.code == 51 }?.value?.toDoubleOrNull() ?: 360.0 else 360.0
+                        val startAngle = if (type.equals("ARC", true)) e.firstOrNull { it.code == 50 }?.value?.toDoubleOrNull() ?: 0.0 else 0.0
+                        val endAngle = if (type.equals("ARC", true)) e.firstOrNull { it.code == 51 }?.value?.toDoubleOrNull() ?: 360.0 else 360.0
                         var sweep = endAngle - startAngle
                         while (sweep <= 0.0) sweep += 360.0
                         val steps = (sweep / 7.5).toInt().coerceIn(8, 96)
