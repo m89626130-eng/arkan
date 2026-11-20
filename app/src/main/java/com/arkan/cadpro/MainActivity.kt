@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -138,6 +139,8 @@ private fun ArkanApp() {
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
     var viewZoom by remember { mutableStateOf(1f) }
+    var viewPanX by remember { mutableStateOf(0f) }
+    var viewPanY by remember { mutableStateOf(0f) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
@@ -471,7 +474,8 @@ private fun ArkanApp() {
             }
             Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
-            Canvas(Modifier.fillMaxWidth().height(360.dp).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent) {
+            Box(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp))) {
+            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {
                         cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft)
@@ -709,6 +713,11 @@ private fun ArkanApp() {
                         drawRect(Color(0xFFFFC857), Offset(mh.point.x-halfWidth,mh.point.y-halfLength), androidx.compose.ui.geometry.Size(halfWidth*2,halfLength*2), style=androidx.compose.ui.graphics.drawscope.Stroke(width=3f))
                     }
                 }
+            }
+            Column(Modifier.align(androidx.compose.ui.Alignment.CenterEnd).padding(end = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { viewZoom = (viewZoom * 1.25f).coerceAtMost(8f); status = "تكبير: ${(viewZoom * 100).toInt()}%" }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(46.dp)) { Text("+", fontSize = 25.sp) }
+                OutlinedButton(onClick = { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f); status = "تصغير: ${(viewZoom * 100).toInt()}%" }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(46.dp)) { Text("−", fontSize = 25.sp) }
+            }
             }
             Spacer(Modifier.height(6.dp))
             Text("كل مربع = 1 متر (مقياس تجريبي) • $status", color=Color.White,fontSize=11.sp)
