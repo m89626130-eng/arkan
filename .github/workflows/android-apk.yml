@@ -45,18 +45,22 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DENABLE_LTO=OFF \
             -DDISABLE_WERROR=ON
-          cmake --build build-libredwg --target dwg2dxf dxf2dwg --parallel 2
+          cmake --build build-libredwg --target dwg2dxf dxf2dwg dwgread --parallel 2
           mkdir -p app/src/main/jniLibs/arm64-v8a
           DWG2DXF="$(find build-libredwg -type f -name dwg2dxf -perm -u+x | head -n 1)"
           DXF2DWG="$(find build-libredwg -type f -name dxf2dwg -perm -u+x | head -n 1)"
+          DWGREAD="$(find build-libredwg -type f -name dwgread -perm -u+x | head -n 1)"
           test -n "$DWG2DXF" && test -s "$DWG2DXF"
           test -n "$DXF2DWG" && test -s "$DXF2DWG"
+          test -n "$DWGREAD" && test -s "$DWGREAD"
           cp "$DWG2DXF" app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so
           cp "$DXF2DWG" app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
-          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
-          file app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
+          cp "$DWGREAD" app/src/main/jniLibs/arm64-v8a/libdwgread.so
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so app/src/main/jniLibs/arm64-v8a/libdwgread.so
+          file app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so app/src/main/jniLibs/arm64-v8a/libdwgread.so
           test -s app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so
           test -s app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
+          test -s app/src/main/jniLibs/arm64-v8a/libdwgread.so
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
@@ -72,6 +76,8 @@ jobs:
           unzip -p "$APK" lib/arm64-v8a/libdxf2dwg.so > "$RUNNER_TEMP/dwg-verify/dxf2dwg"
           test -s "$RUNNER_TEMP/dwg-verify/dwg2dxf"
           test -s "$RUNNER_TEMP/dwg-verify/dxf2dwg"
+          unzip -p "$APK" lib/arm64-v8a/libdwgread.so > "$RUNNER_TEMP/dwg-verify/dwgread"
+          test -s "$RUNNER_TEMP/dwg-verify/dwgread"
       - name: Sign APK with permanent ARKAN key
         env:
           ARKAN_KEYSTORE_BASE64: ${{ secrets.ARKAN_KEYSTORE_BASE64 }}
