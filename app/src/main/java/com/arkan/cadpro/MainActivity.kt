@@ -1022,6 +1022,34 @@ private object DxfKmlImporter {
                 current.add(p)
             }
         }
+        // Join classic POLYLINE records with their following VERTEX records.
+        val expandedEntities = mutableListOf<List<PairCode>>()
+        var entityIndex = 0
+        while (entityIndex < entities.size) {
+            val entity = entities[entityIndex]
+            val entityName = entity.firstOrNull()?.value?.uppercase(Locale.ROOT)
+            if (entityName == "POLYLINE") {
+                val combined = entity.toMutableList()
+                var vertexIndex = entityIndex + 1
+                while (vertexIndex < entities.size) {
+                    val next = entities[vertexIndex]
+                    val nextType = next.firstOrNull()?.value?.uppercase(Locale.ROOT)
+                    if (nextType == "SEQEND") break
+                    if (nextType != "VERTEX") break
+                    next.filter { it.code == 10 || it.code == 20 }.forEach { combined.add(it) }
+                    vertexIndex++
+                }
+                expandedEntities.add(combined)
+                entityIndex = if (vertexIndex < entities.size &&
+                    entities[vertexIndex].firstOrNull()?.value.equals("SEQEND", true)) vertexIndex + 1 else vertexIndex
+            } else {
+                if (entityName != "VERTEX" && entityName != "SEQEND") expandedEntities.add(entity)
+                entityIndex++
+            }
+        }
+        entities.clear()
+        entities.addAll(expandedEntities)
+
         val placemarks = StringBuilder()
         var pipeCount = 0
         val layerLengths = mutableMapOf<String, Double>()
@@ -1073,7 +1101,7 @@ private object DxfKmlImporter {
         for (e in entities) {
             val type = e.firstOrNull()?.value ?: continue
             val layer = e.firstOrNull { it.code == 8 }?.value ?: ""
-            if (type == "LINE" || type == "LWPOLYLINE" || type == "CIRCLE" || type == "ARC") {
+            if (type == "LINE" || type == "LWPOLYLINE" || type == "POLYLINE" || type == "CIRCLE" || type == "ARC") {
                 val pts = mutableListOf<Pair<Double, Double>>()
                 if (type == "LINE") {
                     val x1 = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull()
