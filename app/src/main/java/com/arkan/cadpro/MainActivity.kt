@@ -152,6 +152,7 @@ private fun ArkanApp() {
     var showMeasureTools by remember { mutableStateOf(true) }
     var showDiameterTools by remember { mutableStateOf(true) }
     var showSewerNetworkTools by remember { mutableStateOf(true) }
+    var showSlopeDialog by remember { mutableStateOf(false) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
     var viewZoom by remember { mutableStateOf(1f) }
@@ -487,11 +488,21 @@ private fun ArkanApp() {
                                 modifier = Modifier.weight(1f)
                             ) { Text("◉  إضافة المناهيل") }
                         }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { showPipeDiameterMenu = true },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Ø  قطر الأنبوب: ${pipeLayer.substringAfterLast("-")} مم") }
+                            OutlinedButton(
+                                onClick = { showSlopeDialog = true },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("٪  الميل: $targetSlopePercent%") }
+                        }
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { showPipeDiameterMenu = true },
                                 modifier = Modifier.fillMaxWidth()
-                            ) { Text("Ø  قطر الأنبوب: ${pipeLayer.substringAfterLast("-")} مم") }
+                            ) { Text("اختر قطر الأنبوب") }
                             DropdownMenu(
                                 expanded = showPipeDiameterMenu,
                                 onDismissRequest = { showPipeDiameterMenu = false }
@@ -1217,6 +1228,43 @@ private fun ArkanApp() {
         }
     }
 
+    if (showSlopeDialog) AlertDialog(
+        onDismissRequest = { showSlopeDialog = false },
+        title = { Text("نسبة ميل أنابيب الصرف الصحي") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = targetSlopePercent,
+                    onValueChange = { targetSlopePercent = it },
+                    label = { Text("الميل (%)") },
+                    placeholder = { Text("مثال: 0.50") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "أدخل الميل كنسبة مئوية؛ مثلاً 0.50 تعني نصف بالمئة. يُستخدم لحساب INV للمنهول التالي تلقائياً عند ترك قيمة INV فارغة.",
+                    color = Color.LightGray,
+                    fontSize = 11.sp
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val slope = targetSlopePercent.toDoubleOrNull()
+                if (slope == null || slope <= 0.0 || slope > 100.0) {
+                    status = "أدخل نسبة ميل صحيحة أكبر من صفر وحتى 100%."
+                } else {
+                    targetSlopePercent = String.format(Locale.US, "%.3f", slope).trimEnd('0').trimEnd('.')
+                    status = "تم ضبط ميل شبكة الصرف الصحي على $targetSlopePercent%."
+                    showSlopeDialog = false
+                }
+            }) { Text("حفظ الميل") }
+        },
+        dismissButton = {
+            TextButton(onClick = { showSlopeDialog = false }) { Text("إلغاء") }
+        }
+    )
+
     if (showNewLayerDialog) AlertDialog(
         onDismissRequest = { showNewLayerDialog = false },
         title = { Text("إنشاء طبقة جديدة / NEW LAYER") },
@@ -1282,9 +1330,7 @@ private fun ArkanApp() {
             val previewDepth = mhGroundLevel.toDoubleOrNull()?.let { gl -> mhInvertLevel.toDoubleOrNull()?.let { inv -> gl - inv } } ?: 0.0
             val automaticType = when { previewDepth <= 0.0 -> "بانتظار INV"; previewDepth <= 1.70 -> "AS"; previewDepth <= 3.00 -> "BS"; previewDepth <= 4.00 -> "CS"; else -> "CD" }
             OutlinedTextField(value = automaticType, onValueChange = {}, label = { Text("نوع المنهولة (تلقائي)") }, modifier = Modifier.fillMaxWidth(), readOnly = true, singleLine = true)
-            OutlinedTextField(targetSlopePercent, { targetSlopePercent = it }, label = { Text("نسبة الميول (%)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("أدخل نسبة الميل هنا، مثلاً 0.50 أو 1.00. يستخدمها البرنامج لحساب INV للمنهول التالي تلقائياً حسب طول الأنبوب.", color = Color.LightGray, fontSize = 11.sp)
-            Text("أدخل GL لكل منهول. أدخل INV للمنهول الأول؛ ويمكن ترك INV للمناهيل التالية فارغاً ليحسبه البرنامج من نسبة الميل أعلاه. نوع المنهول يُحدد تلقائياً ولا يحتاج اختياراً يدوياً.", color = Color.LightGray, fontSize = 11.sp)
+            Text("اضبط نسبة الميل من الخيار الرابع داخل حافظة شبكة الصرف الصحي. أدخل GL لكل منهول وINV للمنهول الأول؛ ويمكن ترك INV للمناهيل التالية فارغاً ليحسبه البرنامج وفق الميل وطول الأنبوب. نوع المنهول يُحدد تلقائياً.", color = Color.LightGray, fontSize = 11.sp)
         }},
         confirmButton={ TextButton(onClick={
             try {
