@@ -143,6 +143,7 @@ private fun ArkanApp() {
     var viewPanY by remember { mutableStateOf(0f) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadCornerDistance by remember { mutableStateOf("0.25") }
+    var cadStretchVertex by remember { mutableStateOf<Int?>(null) }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
     var mode by remember { mutableStateOf("PIPE") }
@@ -434,13 +435,13 @@ private fun ArkanApp() {
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("MOVE", "COPY", "OFFSET").forEach { tool ->
+                    listOf("MOVE", "COPY", "ROTATE").forEach { tool ->
                         OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("TRIM", "EXTEND", "DELETE").forEach { tool ->
-                        OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                    listOf("TRIM", "EXTEND", "STRETCH").forEach { tool ->
+                        OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; "STRETCH" -> "حدد العنصر ثم اختر الرأس المراد سحبه ثم موضعه الجديد."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
@@ -501,7 +502,7 @@ private fun ArkanApp() {
                                 status = "تم حذف العنصر."
                             } else status = "لم يتم تحديد عنصر قريب."
                         }
-                        mode in listOf("MOVE","COPY","OFFSET","TRIM","EXTEND","FILLET","CHAMFER") -> {
+                        mode in listOf("MOVE","COPY","OFFSET","ROTATE","STRETCH","TRIM","EXTEND","FILLET","CHAMFER") -> {
                             val selected = cadEditSelection
                             val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
                                 ?.takeIf { cadEntityDistance(tap,cadEntities[it]) <= 28f }
@@ -513,6 +514,8 @@ private fun ArkanApp() {
                                         "TRIM" -> "تم تحديد حد القطع. المس العنصر المراد تشذيبه."
                                         "EXTEND" -> "تم تحديد خط الحد. المس العنصر المراد تمديده."
                                         "FILLET", "CHAMFER" -> "تم تحديد الخط الأول. اختر الخط الثاني."
+                                        "ROTATE" -> "تم تحديد العنصر. حدد مركز الدوران ثم نقطة البداية ثم نقطة النهاية للزاوية."
+                                        "STRETCH" -> "تم تحديد العنصر. اختر الرأس/النقطة التي تريد تحريكها."
                                         else -> "تم تحديد ${cadEntities[hit].type}. حدد نقطة/جهة التنفيذ."
                                     }
                                 }
@@ -637,7 +640,38 @@ private fun ArkanApp() {
                             } else {
                                 val entity = cadEntities.getOrNull(selected)
                                 if (entity == null) { cadEditSelection = null; status = "العنصر المحدد غير موجود." }
-                                else if (mode == "OFFSET") {
+                                else if (mode == "ROTATE") {
+                                    if (cadDraft.size < 2) {
+                                        cadDraft = cadDraft + tap
+                                        status = if(cadDraft.size == 1) "حدد نقطة بداية زاوية الدوران." else "حدد نقطة نهاية زاوية الدوران."
+                                    } else {
+                                        val base = cadDraft[0]; val ref = cadDraft[1]
+                                        val a1 = atan2((ref.y-base.y).toDouble(),(ref.x-base.x).toDouble())
+                                        val a2 = atan2((tap.y-base.y).toDouble(),(tap.x-base.x).toDouble())
+                                        val angle = a2-a1
+                                        val rotated = entity.copy(points=entity.points.map { p ->
+                                            val dx=p.x-base.x; val dy=p.y-base.y
+                                            Offset(base.x+(dx*cos(angle)-dy*sin(angle)).toFloat(),base.y+(dx*sin(angle)+dy*cos(angle)).toFloat())
+                                        })
+                                        cadEntities=cadEntities.toMutableList().also { it[selected]=rotated }
+                                        cadRedo=emptyList(); cadEditSelection=null; cadDraft=emptyList()
+                                        status="تم تدوير العنصر بمقدار %.2f درجة.".format(Locale.US,Math.toDegrees(angle))
+                                    }
+                                } else if (mode == "STRETCH") {
+                                    if (entity.points.isEmpty()) { cadEditSelection=null; status="العنصر لا يحتوي نقاطاً قابلة للتمديد." }
+                                    else if (cadStretchVertex == null) {
+                                        val vi=entity.points.indices.minByOrNull { i -> hypot((tap.x-entity.points[i].x).toDouble(),(tap.y-entity.points[i].y).toDouble()) }
+                                        val distance=vi?.let { hypot((tap.x-entity.points[it].x).toDouble(),(tap.y-entity.points[it].y).toDouble()) } ?: Double.MAX_VALUE
+                                        if(vi==null || distance>36.0) { cadEditSelection=null; status="المس قريباً من إحدى نقاط العنصر." }
+                                        else { cadStretchVertex=vi; status="تم تحديد الرأس. المس الموقع الجديد للرأس." }
+                                    } else {
+                                        val vi=cadStretchVertex!!
+                                        val changed=entity.copy(points=entity.points.mapIndexed { i,p -> if(i==vi) tap else p })
+                                        cadEntities=cadEntities.toMutableList().also { it[selected]=changed }
+                                        cadRedo=emptyList(); cadEditSelection=null; cadStretchVertex=null
+                                        status="تم تنفيذ STRETCH بتحريك نقطة واحدة."
+                                    }
+                                } else if (mode == "OFFSET") {
                                     val d = cadOffsetDistance.toFloatOrNull()
                                     if (d == null || d <= 0f) status = "أدخل مسافة OFFSET موجبة."
                                     else if (entity.type !in listOf("LINE","POLYLINE")) status = "OFFSET يدعم حالياً LINE وPOLYLINE فقط."
