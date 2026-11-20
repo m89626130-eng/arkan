@@ -48,7 +48,7 @@ private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Dou
     (originEasting + point.x / PX_PER_METER) to (originNorthing - point.y / PX_PER_METER)
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
 private data class CadLayer(val name: String, val color: Long, val visible: Boolean = true, val locked: Boolean = false)
-private data class CadEntity(val type: String, val points: List<Offset>, val layer: String = "0", val text: String = "")
+private data class CadEntity(val type: String, val points: List<Offset>, val layer: String = "0", val text: String = "", val color: Long? = null)
 private fun segmentDistance(p: Offset, a: Offset, b: Offset): Float {
     val dx=b.x-a.x; val dy=b.y-a.y
     val len2=dx*dx+dy*dy
@@ -144,6 +144,7 @@ private fun ArkanApp() {
     var showNewLayerDialog by remember { mutableStateOf(false) }
     var newLayerName by remember { mutableStateOf("") }
     var newLayerColor by remember { mutableStateOf(0xFF00C8A0L) }
+    var cadColorValue by remember { mutableStateOf(0xFFFFC857L) }
     var showLayerMenu by remember { mutableStateOf(false) }
     var showDrawTools by remember { mutableStateOf(true) }
     var showEditTools by remember { mutableStateOf(true) }
@@ -199,6 +200,7 @@ private fun ArkanApp() {
     var pendingManhole by remember { mutableStateOf<Manhole?>(null) }
     val context = LocalContext.current
     fun cadLayerColor(name: String): Color = Color(cadLayers.firstOrNull { it.name == name }?.color ?: 0xFFFFFFFF)
+    fun cadEntityColor(entity: CadEntity): Color = Color(entity.color ?: (cadLayers.firstOrNull { it.name == entity.layer }?.color ?: 0xFFFFFFFF))
     val visibleCadEntities = cadEntities.filter { entity -> cadLayers.firstOrNull { it.name == entity.layer }?.visible != false }
 
     val totalLength = pipes.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER }
@@ -492,6 +494,7 @@ private fun ArkanApp() {
                         }
                     }
 
+                        OutlinedButton(onClick = { mode = "DIMENSION"; cadDraft = emptyList(); status = "حدد نقطتي بداية ونهاية البعد على الرسم." }, modifier = Modifier.fillMaxWidth()) { Text("DIMENSION  |  قياس الأبعاد على الرسم") }
                     }
                     OutlinedButton(onClick = { showLayerTools = !showLayerTools }, modifier = Modifier.fillMaxWidth()) {
                         Text(if (showLayerTools) "LAYER  ▾  الطبقات والعرض" else "LAYER  ▸  الطبقات والعرض")
@@ -506,6 +509,13 @@ private fun ArkanApp() {
                             }
                             Button(onClick = { newLayerName = ""; newLayerColor = 0xFF00C8A0L; showNewLayerDialog = true }) { Text("＋ NEW LAYER") }
                         }
+                        Text("COLOR — اختر لون العنصر ثم المسه لتغييره", color = Color(0xFF00C8A0), fontSize = 12.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf(0xFFFF4040L,0xFF3080FFFFL,0xFF20C060L,0xFFFFD21FL,0xFF20D8E8L,0xFFFFFFFFL,0xFFFF9633L).forEach { swatch ->
+                                Button(onClick = { cadColorValue = swatch; status = "تم اختيار لون العنصر." }, colors = ButtonDefaults.buttonColors(containerColor = Color(swatch)), contentPadding = PaddingValues(0.dp), modifier = Modifier.weight(1f).height(34.dp)) { Text(if (cadColorValue == swatch) "✓" else " ") }
+                            }
+                        }
+                        OutlinedButton(onClick = { mode = "COLOR"; cadEditSelection = null; status = "المس العنصر الذي تريد تغيير لونه." }, modifier = Modifier.fillMaxWidth()) { Text("COLOR  |  تغيير لون عنصر") }
                         cadLayers.forEach { layer ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("●  ${layer.name}", color = Color(layer.color), fontSize = 11.sp)
@@ -577,10 +587,10 @@ private fun ArkanApp() {
             Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp))) {
-            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing) {
+            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {
-                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft)
+                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
                         cadRedo = emptyList()
                         cadDraft = emptyList()
                         status = "تم إنهاء POLYLINE."
@@ -615,6 +625,21 @@ private fun ArkanApp() {
                             status = if (e0 != null && n0 != null) "ID POINT | X = %.3f م | Y = %.3f م | E = %.3f | N = %.3f".format(Locale.US, x, y, e0 + x, n0 + y)
                                 else "ID POINT | X = %.3f م | Y = %.3f م (إحداثيات محلية للرسم)".format(Locale.US, x, y)
                             mode = "PIPE"
+                        }
+                        mode == "DIMENSION" -> {
+                            if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد نقطة نهاية البعد." }
+                            else {
+                                val first = cadDraft.first()
+                                if (hypot((tap.x-first.x).toDouble(),(tap.y-first.y).toDouble()) < 1f) status = "المس نقطة مختلفة لإنشاء البعد."
+                                else { cadEntities = cadEntities + CadEntity("DIMENSION", listOf(first,tap), currentCadLayer); cadRedo = emptyList(); status = "تم إنشاء DIMENSION على الرسم."; cadDraft = emptyList(); mode = "PIPE" }
+                            }
+                        }
+                        mode == "COLOR" -> {
+                            val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
+                            if (hit != null && cadEntityDistance(tap,cadEntities[hit]) <= 32f) {
+                                cadEntities = cadEntities.toMutableList().also { it[hit] = it[hit].copy(color = cadColorValue) }
+                                cadRedo = emptyList(); status = "تم تغيير لون العنصر."; mode = "PIPE"
+                            } else status = "لم يتم تحديد عنصر قريب لتغيير لونه."
                         }
                         mode == "TEXT" -> {
                             val value = cadTextValue.trim()
@@ -910,7 +935,7 @@ private fun ArkanApp() {
                     }
                 }
                 visibleCadEntities.forEach { entity ->
-                    val entityColor = cadLayerColor(entity.layer)
+                    val entityColor = cadEntityColor(entity)
                     when (entity.type) {
                         "LINE" -> if (entity.points.size >= 2) drawLine(entityColor, entity.points[0], entity.points[1], 2f)
                         "POLYLINE" -> entity.points.zipWithNext().forEach { (a,b) -> drawLine(entityColor, a, b, 2f) }
@@ -925,6 +950,23 @@ private fun ArkanApp() {
                         "ARC" -> {
                             val pts = arcPoints(entity.points)
                             pts.zipWithNext().forEach { (a,b) -> drawLine(Color.White, a, b, 2f) }
+                        }
+                        "DIMENSION" -> if (entity.points.size >= 2) {
+                            val a = entity.points[0]; val b = entity.points[1]
+                            val dx = b.x-a.x; val dy = b.y-a.y
+                            val length = hypot(dx.toDouble(),dy.toDouble()).toFloat().coerceAtLeast(1f)
+                            val nx = -dy/length; val ny = dx/length
+                            val off = 22f
+                            val da = Offset(a.x+nx*off,a.y+ny*off); val db = Offset(b.x+nx*off,b.y+ny*off)
+                            drawLine(entityColor,a,da,1f); drawLine(entityColor,b,db,1f); drawLine(entityColor,da,db,2f)
+                            val arrow = 7f
+                            drawLine(entityColor,da,Offset(da.x+(dx/length*arrow)+(nx*arrow*0.55f),da.y+(dy/length*arrow)+(ny*arrow*0.55f)),2f)
+                            drawLine(entityColor,da,Offset(da.x+(dx/length*arrow)-(nx*arrow*0.55f),da.y+(dy/length*arrow)-(ny*arrow*0.55f)),2f)
+                            drawLine(entityColor,db,Offset(db.x-(dx/length*arrow)+(nx*arrow*0.55f),db.y-(dy/length*arrow)+(ny*arrow*0.55f)),2f)
+                            drawLine(entityColor,db,Offset(db.x-(dx/length*arrow)-(nx*arrow*0.55f),db.y-(dy/length*arrow)-(ny*arrow*0.55f)),2f)
+                            val label = "%.2f m".format(Locale.US,length/PX_PER_METER)
+                            val paint = Paint().apply { color = entityColor.toArgb(); textSize = 15f; isAntiAlias = true; textAlign = Paint.Align.CENTER }
+                            drawContext.canvas.nativeCanvas.drawText(label,(da.x+db.x)/2f,(da.y+db.y)/2f-5f,paint)
                         }
                         "TEXT" -> if (entity.points.isNotEmpty()) {
                             val paint = Paint().apply { color = entityColor.toArgb(); textSize = 16f; isAntiAlias = true }
