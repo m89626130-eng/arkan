@@ -24,7 +24,7 @@ internal object LibreDwgRunner {
     }
 
     private fun run(executable: File, input: File, output: File) {
-        val process = ProcessBuilder(executable.absolutePath, "-o", output.absolutePath, input.absolutePath)
+        val process = ProcessBuilder(executable.absolutePath, input.absolutePath, "-o", output.absolutePath, "-y")
             .redirectErrorStream(true).start()
         val log = process.inputStream.bufferedReader().use { it.readText() }
         val exit = process.waitFor()
