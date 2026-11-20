@@ -811,7 +811,8 @@ private fun ArkanApp() {
                                         val a=entity.points.first(); val b=entity.points.last()
                                         val side=(b.x-a.x)*(tap.y-a.y)-(b.y-a.y)*(tap.x-a.x)
                                         val shifted=offsetCadPoints(entity.points,d*PX_PER_METER,side)
-                                        if(shifted.size>=2) { cadEntities=cadEntities+CadEntity(entity.type,shifted,entity.layer); cadRedo=emptyList(); status="تم إنشاء OFFSET بمقدار $d م." }                                        cadEditSelection=null
+                                        if(shifted.size>=2) { cadEntities=cadEntities+CadEntity(entity.type,shifted,entity.layer); cadRedo=emptyList(); status="تم إنشاء OFFSET بمقدار $d م." }
+                                        cadEditSelection=null
                                     }
                                 } else {
                                     val anchor=entity.points.firstOrNull()
@@ -1807,7 +1808,8 @@ private object DxfKmlImporter {
                         val found = mutableListOf<Pair<Double, Double>>()
                         var x: Double? = null
                         for (p in e.drop(1)) {
-                            if (p.code == codeX) x = p.value.toDoubleOrNull()                            if (p.code == codeY && x != null) {
+                            if (p.code == codeX) x = p.value.toDoubleOrNull()
+                            if (p.code == codeY && x != null) {
                                 p.value.toDoubleOrNull()?.let { found.add(x!! to it) }
                                 x = null
                             }
