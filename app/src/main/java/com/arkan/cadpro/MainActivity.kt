@@ -145,25 +145,6 @@ private fun ArkanApp() {
         }
     }
 
-    val dwtPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) try {
-            val convertedFile = LibreDwgRunner.convertDwgToDxf(context, uri)
-            val converted = DxfKmlImporter.convert(convertedFile.readText(Charsets.UTF_8))
-            importedKml = converted.kml
-            importedSummary = converted.summary
-            importedLayerLengths = converted.layerLengths
-            importedManholeCount = converted.manholeCount
-            importedManholes = converted.manholes
-            importedPaths = converted.paths
-            importedDiameterLengths = converted.diameterLengths
-            importedUnclassifiedGeometryLength = converted.unclassifiedGeometryLength
-            dxfFileName = uri.lastPathSegment ?: "DWT"
-            status = "تمت محاولة فتح قالب DWT وتحويله إلى رسم: $importedSummary"
-        } catch (e: Exception) {
-            status = "تعذر فتح قالب DWT. قد لا يكون متوافقاً مع محول DWG الحالي: " + e.message
-        }
-    }
-
     val dwgPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) try {
             val convertedFile = LibreDwgRunner.convertDwgToDxf(context, uri)
@@ -341,10 +322,7 @@ private fun ArkanApp() {
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { dwgPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("استيراد DWG") }
-                    Button(onClick = { dwtPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("فتح قالب DWT") }
-                }
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(onClick = { showClearConfirm = true }, modifier = Modifier.fillMaxWidth()) { Text("مسح الرسم") }
+                    OutlinedButton(onClick = { showClearConfirm = true }, modifier = Modifier.weight(1f)) { Text("مسح الرسم") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { mode = "PIPE"; pipeStart = null }, modifier = Modifier.weight(1f)) { Text("رسم أنبوب") }
