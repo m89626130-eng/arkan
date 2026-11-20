@@ -151,6 +151,7 @@ private fun ArkanApp() {
     var showLayerTools by remember { mutableStateOf(true) }
     var showMeasureTools by remember { mutableStateOf(true) }
     var showDiameterTools by remember { mutableStateOf(true) }
+    var showSewerNetworkTools by remember { mutableStateOf(true) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
     var viewZoom by remember { mutableStateOf(1f) }
@@ -468,9 +469,46 @@ private fun ArkanApp() {
                     Button(onClick = { dwgPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("استيراد DWG") }
                     OutlinedButton(onClick = { showClearConfirm = true }, modifier = Modifier.weight(1f)) { Text("مسح الرسم") }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { mode = "PIPE"; pipeStart = null }, modifier = Modifier.weight(1f)) { Text("رسم أنبوب") }
-                    Button(onClick = { showManholeDialog = true }, modifier = Modifier.weight(1f)) { Text("إضافة منهول") }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = { showSewerNetworkTools = !showSewerNetworkTools },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showSewerNetworkTools) "شبكة الصرف الصحي  ▾" else "شبكة الصرف الصحي  ▸")
+                    }
+                    if (showSewerNetworkTools) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                onClick = { mode = "PIPE"; pipeStart = null; status = "رسم الأنبوب: حدد نقطة البداية ثم نقطة النهاية." },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("━  رسم الأنبوب") }
+                            Button(
+                                onClick = { showManholeDialog = true },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("◉  إضافة المناهيل") }
+                        }
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { showPipeDiameterMenu = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Ø  قطر الأنبوب: ${pipeLayer.substringAfterLast("-")} مم") }
+                            DropdownMenu(
+                                expanded = showPipeDiameterMenu,
+                                onDismissRequest = { showPipeDiameterMenu = false }
+                            ) {
+                                listOf("250", "315", "400", "500", "600", "700").forEach { diameter ->
+                                    DropdownMenuItem(
+                                        text = { Text("$diameter مم") },
+                                        onClick = {
+                                            pipeLayer = "PIPE-$diameter"
+                                            showPipeDiameterMenu = false
+                                            status = "تم اختيار قطر $diameter مم"
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     OutlinedButton(onClick = { viewZoom = (viewZoom * 1.25f).coerceAtMost(6f); status = "تكبير العرض: ${(viewZoom * 100).toInt()}%" }, modifier = Modifier.weight(1f)) { Text("＋ تكبير") }
@@ -561,20 +599,7 @@ private fun ArkanApp() {
                     }
                 }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Box(modifier = Modifier.weight(1f)) {
-                    Button(onClick = { showPipeDiameterMenu = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text("قطر الأنبوب: ${pipeLayer.substringAfterLast("-")} مم")
-                    }
-                    DropdownMenu(expanded = showPipeDiameterMenu, onDismissRequest = { showPipeDiameterMenu = false }) {
-                        listOf("250", "315", "400", "500", "600", "700").forEach { diameter ->
-                            DropdownMenuItem(
-                                text = { Text("$diameter مم") },
-                                onClick = { pipeLayer = "PIPE-$diameter"; showPipeDiameterMenu = false; status = "تم اختيار قطر $diameter مم" }
-                            )
-                        }
-                    }
-                }
-                Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("اختيار LSP") }
+                Button(onClick = { lispPicker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("اختيار LSP") }
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedButton(onClick = { showDiameterTools = !showDiameterTools }, modifier = Modifier.fillMaxWidth()) {
