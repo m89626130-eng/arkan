@@ -108,7 +108,7 @@ private fun ArkanApp() {
     var mhId by remember { mutableStateOf("MH-01") }
     var mhDepth by remember { mutableStateOf("") }
     var mhLength by remember { mutableStateOf("1.10") }
-    var mhWidth by remember { mutableStateOf("1.10") }
+    var mhWidth by remember { mutableStateOf("0.70") }
     var mhNorthing by remember { mutableStateOf("") }
     var mhEasting by remember { mutableStateOf("") }
     var mhGroundLevel by remember { mutableStateOf("") }
@@ -1057,7 +1057,7 @@ private object DxfKmlImporter {
         val structurePositions = entities.filter { e ->
             val block = e.firstOrNull { it.code == 2 }?.value.orEmpty()
             val layer = e.firstOrNull { it.code == 8 }?.value.orEmpty()
-            e.firstOrNull()?.value == "INSERT" && (block + " " + layer).contains(Regex("(?i)(MH|MANHOLE|STRUCT|SSWR|SEWER|CHAMBER)"))
+            e.firstOrNull()?.value.equals("INSERT", true) && (block + " " + layer).contains(Regex("(?i)(MH|MANHOLE|STRUCT|SSWR|SEWER|CHAMBER)"))
         }.mapNotNull { e ->
             val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
             val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
@@ -1066,7 +1066,7 @@ private object DxfKmlImporter {
         }
         val labels = entities.filter { e ->
             val type = e.firstOrNull()?.value
-            (type == "TEXT" || type == "MTEXT")
+            (type.equals("TEXT", true) || type.equals("MTEXT", true))
         }.mapNotNull { e ->
             val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
             val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
@@ -1090,7 +1090,7 @@ private object DxfKmlImporter {
                 .minByOrNull { hypot(it.east - pos.east, it.north - pos.north) }
             val extractedId = nearestStructure?.text?.let { Regex("""\(([^)]+)\)""").find(it)?.groupValues?.getOrNull(1) }
             val extractedDepth = nearestDepth?.text?.let { Regex("""(?i)h\s*:\s*([-+]?\d+(?:\.\d+)?)""").find(it)?.groupValues?.getOrNull(1)?.toDoubleOrNull() } ?: 0.0
-            Manhole(extractedId?.let { "MH-$it" } ?: "Manhole ${index + 1}", Offset.Zero, extractedDepth, 1.10, 1.10, pos.north, pos.east, pos.alt)
+            Manhole(extractedId?.let { "MH-$it" } ?: "MH-%02d".format(Locale.US, index + 1), Offset.Zero, extractedDepth, if (extractedDepth >= 1.70) 0.7318 else 1.10, if (extractedDepth >= 1.70) 0.7318 else 0.70, pos.north, pos.east, pos.alt, coordinatesKnown = false)
         }
         importedManholes.forEach { mh ->
             val geo = utmToWgs84(mh.easting, mh.northing, mh.altitude)
@@ -1101,15 +1101,15 @@ private object DxfKmlImporter {
         for (e in entities) {
             val type = e.firstOrNull()?.value ?: continue
             val layer = e.firstOrNull { it.code == 8 }?.value ?: ""
-            if (type == "LINE" || type == "LWPOLYLINE" || type == "POLYLINE" || type == "CIRCLE" || type == "ARC") {
+            if (type.equals("LINE", true) || type.equals("LWPOLYLINE", true) || type.equals("POLYLINE", true) || type.equals("CIRCLE", true) || type.equals("ARC", true) || type.equals("SPLINE", true) || type.equals("ELLIPSE", true)) {
                 val pts = mutableListOf<Pair<Double, Double>>()
-                if (type == "LINE") {
+                if (type.equals("LINE", true)) {
                     val x1 = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull()
                     val y1 = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull()
                     val x2 = e.firstOrNull { it.code == 11 }?.value?.toDoubleOrNull()
                     val y2 = e.firstOrNull { it.code == 21 }?.value?.toDoubleOrNull()
                     if (x1 != null && y1 != null && x2 != null && y2 != null) { pts.add(x1 to y1); pts.add(x2 to y2) }
-                } else if (type == "CIRCLE" || type == "ARC") {
+                } else if (type.equals("CIRCLE", true) || type.equals("ARC", true)) {
                     val cx = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull()
                     val cy = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull()
                     val radius = e.firstOrNull { it.code == 40 }?.value?.toDoubleOrNull()
@@ -1124,6 +1124,44 @@ private object DxfKmlImporter {
                             pts.add((cx + radius * kotlin.math.cos(angle)) to (cy + radius * kotlin.math.sin(angle)))
                         }
                     }
+                } else if (type.equals("ELLIPSE", true)) {
+                    val cx = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull()
+                    val cy = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull()
+                    val majorX = e.firstOrNull { it.code == 11 }?.value?.toDoubleOrNull()
+                    val majorY = e.firstOrNull { it.code == 21 }?.value?.toDoubleOrNull()
+                    val ratio = e.firstOrNull { it.code == 40 }?.value?.toDoubleOrNull()
+                    if (cx != null && cy != null && majorX != null && majorY != null && ratio != null && ratio > 0.0) {
+                        val startParam = e.firstOrNull { it.code == 41 }?.value?.toDoubleOrNull() ?: 0.0
+                        val endParam = e.firstOrNull { it.code == 42 }?.value?.toDoubleOrNull() ?: (2.0 * Math.PI)
+                        var sweep = endParam - startParam
+                        while (sweep <= 0.0) sweep += 2.0 * Math.PI
+                        val steps = (sweep / (Math.PI / 24.0)).toInt().coerceIn(8, 192)
+                        val minorX = -majorY * ratio
+                        val minorY = majorX * ratio
+                        for (step in 0..steps) {
+                            val angle = startParam + sweep * step / steps
+                            pts.add((cx + majorX * kotlin.math.cos(angle) + minorX * kotlin.math.sin(angle)) to
+                                (cy + majorY * kotlin.math.cos(angle) + minorY * kotlin.math.sin(angle)))
+                        }
+                    }
+                } else if (type.equals("SPLINE", true)) {
+                    fun collectPoints(codeX: Int, codeY: Int): List<Pair<Double, Double>> {
+                        val found = mutableListOf<Pair<Double, Double>>()
+                        var x: Double? = null
+                        for (p in e.drop(1)) {
+                            if (p.code == codeX) x = p.value.toDoubleOrNull()
+                            if (p.code == codeY && x != null) {
+                                p.value.toDoubleOrNull()?.let { found.add(x!! to it) }
+                                x = null
+                            }
+                        }
+                        return found
+                    }
+                    val fitPoints = collectPoints(11, 21)
+                    val controlPoints = collectPoints(10, 20)
+                    pts.addAll(if (fitPoints.size >= 2) fitPoints else controlPoints)
+                    val flags = e.firstOrNull { it.code == 70 }?.value?.toIntOrNull() ?: 0
+                    if ((flags and 1) != 0 && pts.size > 2) pts.add(pts.first())
                 } else {
                     var x: Double? = null
                     for (p in e.drop(1)) {
@@ -1150,7 +1188,12 @@ private object DxfKmlImporter {
                 }
             }
         }
-        require(pipeCount > 0 || mhCount > 0) { "تمت قراءة DXF لكن لم يتم العثور على LINE أو LWPOLYLINE أو INSERT للمناهيل." }
+        val entityTypes = entities.mapNotNull { it.firstOrNull()?.value?.uppercase(Locale.ROOT) }.groupingBy { it }.eachCount().toSortedMap()
+        require(pipeCount > 0 || mhCount > 0) {
+            "تمت قراءة قسم ENTITIES (" + entities.size + " عنصر) لكن لم تُستخرج هندسة مدعومة. الأنواع الموجودة: " +
+                entityTypes.entries.joinToString { it.key + "=" + it.value } +
+                ". يدعم LINE وLWPOLYLINE وPOLYLINE وCIRCLE وARC وELLIPSE وSPLINE؛ ويتطلب INSERT تسمية بلوك/طبقة منهول."
+        }
         val kml = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ARKAN Sewer Network</name>$placemarks</Document></kml>"""
         val geometricCenterlineLength = layerLengths.values.sum()
@@ -1158,7 +1201,7 @@ private object DxfKmlImporter {
         val unclassifiedGeometryLength = geometricCenterlineLength - labelledDiameterLength
         return ImportResult(
             kml,
-            "خطوط: $pipeCount | مناهيل: $mhCount | أقطار موسومة: ${diameterLengths.size}",
+            "خطوط: $pipeCount | مناهيل: $mhCount | أقطار موسومة: ${diameterLengths.size} | كيانات DXF: ${entities.size}",
             layerLengths,
             mhCount,
             importedManholes,
