@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -46,6 +47,7 @@ private const val PX_PER_METER = 40f
 private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Double): Pair<Double, Double> =
     (originEasting + point.x / PX_PER_METER) to (originNorthing - point.y / PX_PER_METER)
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
+private data class CadLayer(val name: String, val color: Long, val visible: Boolean = true, val locked: Boolean = false)
 private data class CadEntity(val type: String, val points: List<Offset>, val layer: String = "0", val text: String = "")
 private fun segmentDistance(p: Offset, a: Offset, b: Offset): Float {
     val dx=b.x-a.x; val dy=b.y-a.y
@@ -137,6 +139,12 @@ class MainActivity : ComponentActivity() {
 private fun ArkanApp() {
     var pipes by remember { mutableStateOf(listOf<Pipe>()) }
     var cadEntities by remember { mutableStateOf(listOf<CadEntity>()) }
+    var cadLayers by remember { mutableStateOf(listOf(CadLayer("0", 0xFFFFFFFF))) }
+    var currentCadLayer by remember { mutableStateOf("0") }
+    var showNewLayerDialog by remember { mutableStateOf(false) }
+    var newLayerName by remember { mutableStateOf("") }
+    var newLayerColor by remember { mutableStateOf(0xFF00C8A0L) }
+    var showLayerMenu by remember { mutableStateOf(false) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
     var viewZoom by remember { mutableStateOf(1f) }
@@ -185,6 +193,8 @@ private fun ArkanApp() {
     var mhInvertLevel by remember { mutableStateOf("") }
     var pendingManhole by remember { mutableStateOf<Manhole?>(null) }
     val context = LocalContext.current
+    fun cadLayerColor(name: String): Color = Color(cadLayers.firstOrNull { it.name == name }?.color ?: 0xFFFFFFFF)
+    val visibleCadEntities = cadEntities.filter { entity -> cadLayers.firstOrNull { it.name == entity.layer }?.visible != false }
 
     val totalLength = pipes.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER }
     val effectiveManholes = if (importedKml != null) importedManholes else manholes
@@ -426,6 +436,26 @@ private fun ArkanApp() {
                     OutlinedButton(onClick = { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f); status = "تصغير العرض: ${(viewZoom * 100).toInt()}%" }, modifier = Modifier.weight(1f)) { Text("－ تصغير") }
                     OutlinedButton(onClick = { viewZoom = 1f; status = "تمت إعادة مستوى التقريب إلى 100%." }, modifier = Modifier.weight(1f)) { Text("ملاءمة") }
                 }
+                Text("الطبقات / LAYERS", color = Color(0xFF00C8A0), fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        OutlinedButton(onClick = { showLayerMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("الطبقة الحالية: $currentCadLayer") }
+                        DropdownMenu(expanded = showLayerMenu, onDismissRequest = { showLayerMenu = false }) {
+                            cadLayers.forEach { layer -> DropdownMenuItem(text = { Text(layer.name) }, onClick = { currentCadLayer = layer.name; showLayerMenu = false; status = "الطبقة الحالية: ${layer.name}" }) }
+                        }
+                    }
+                    Button(onClick = { newLayerName = ""; newLayerColor = 0xFF00C8A0L; showNewLayerDialog = true }) { Text("＋ NEW LAYER") }
+                }
+                cadLayers.forEach { layer ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("●  ${layer.name}", color = Color(layer.color), fontSize = 11.sp)
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text(if (layer.visible) "ظاهر" else "مخفي", color = Color.LightGray, fontSize = 10.sp)
+                            TextButton(onClick = { cadLayers = cadLayers.map { if (it.name == layer.name) it.copy(visible = !it.visible) else it }; status = if (layer.visible) "تم إخفاء ${layer.name}" else "تم إظهار ${layer.name}" }) { Text(if (layer.visible) "إخفاء" else "إظهار") }
+                            TextButton(onClick = { cadLayers = cadLayers.map { if (it.name == layer.name) it.copy(locked = !it.locked) else it }; status = if (layer.locked) "تم فتح ${layer.name}" else "تم قفل ${layer.name}" }) { Text(if (layer.locked) "فتح" else "قفل") }
+                        }
+                    }
+                }
                 Text("أدوات الرسم CAD", color = Color(0xFF00C8A0), fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { if (cadEntities.isNotEmpty()) { cadRedo = cadRedo + cadEntities.last(); cadEntities = cadEntities.dropLast(1); status = "تم التراجع عن آخر عنصر CAD." } else status = "لا توجد عناصر CAD للتراجع." }, modifier = Modifier.weight(1f)) { Text("Undo") }
@@ -463,7 +493,7 @@ private fun ArkanApp() {
                     listOf("ARC", "RECTANGLE").forEach { tool ->
                         OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
                     }
-                    OutlinedButton(onClick = { if (cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft); cadRedo = emptyList(); status = "تم إنهاء POLYLINE." } else status = "حدد نقطتين على الأقل."; cadDraft = emptyList() }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text("إنهاء", fontSize = 10.sp) }
+                    OutlinedButton(onClick = { if (cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList(); status = "تم إنهاء POLYLINE." } else status = "حدد نقطتين على الأقل."; cadDraft = emptyList() }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text("إنهاء", fontSize = 10.sp) }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -503,7 +533,7 @@ private fun ArkanApp() {
                             val value = cadTextValue.trim()
                             if (value.isEmpty()) status = "اكتب النص أولاً."
                             else {
-                                cadEntities = cadEntities + CadEntity("TEXT", listOf(tap), "0", value)
+                                cadEntities = cadEntities + CadEntity("TEXT", listOf(tap), currentCadLayer, value)
                                 cadRedo = emptyList()
                                 status = "تم وضع النص على الرسم."
                             }
@@ -712,7 +742,7 @@ private fun ArkanApp() {
                         }
                         mode == "LINE" -> {
                             if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد نقطة نهاية LINE." }
-                            else { cadEntities = cadEntities + CadEntity("LINE", listOf(cadDraft.first(), tap)); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم LINE." }
+                            else { cadEntities = cadEntities + CadEntity("LINE", listOf(cadDraft.first(), tap), currentCadLayer); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم LINE." }
                         }
                         mode == "POLYLINE" -> {
                             cadDraft = cadDraft + tap
@@ -720,15 +750,15 @@ private fun ArkanApp() {
                         }
                         mode == "CIRCLE" -> {
                             if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد نقطة على محيط الدائرة." }
-                            else { cadEntities = cadEntities + CadEntity("CIRCLE", listOf(cadDraft.first(), tap)); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم CIRCLE." }
+                            else { cadEntities = cadEntities + CadEntity("CIRCLE", listOf(cadDraft.first(), tap), currentCadLayer); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم CIRCLE." }
                         }
                         mode == "RECTANGLE" -> {
                             if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد الركن المقابل للمستطيل." }
-                            else { cadEntities = cadEntities + CadEntity("RECTANGLE", listOf(cadDraft.first(), tap)); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم RECTANGLE." }
+                            else { cadEntities = cadEntities + CadEntity("RECTANGLE", listOf(cadDraft.first(), tap), currentCadLayer); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم RECTANGLE." }
                         }
                         mode == "ARC" -> {
                             cadDraft = cadDraft + tap
-                            if (cadDraft.size == 3) { cadEntities = cadEntities + CadEntity("ARC", cadDraft); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم ARC بثلاث نقاط." }
+                            if (cadDraft.size == 3) { cadEntities = cadEntities + CadEntity("ARC", cadDraft, currentCadLayer); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم ARC بثلاث نقاط." }
                             else status = "حدد النقطة ${cadDraft.size + 1} للقوس."
                         }
                         pendingManhole != null -> {
@@ -792,24 +822,25 @@ private fun ArkanApp() {
                         }
                     }
                 }
-                cadEntities.forEach { entity ->
+                visibleCadEntities.forEach { entity ->
+                    val entityColor = cadLayerColor(entity.layer)
                     when (entity.type) {
-                        "LINE" -> if (entity.points.size >= 2) drawLine(Color.White, entity.points[0], entity.points[1], 2f)
-                        "POLYLINE" -> entity.points.zipWithNext().forEach { (a,b) -> drawLine(Color.White, a, b, 2f) }
+                        "LINE" -> if (entity.points.size >= 2) drawLine(entityColor, entity.points[0], entity.points[1], 2f)
+                        "POLYLINE" -> entity.points.zipWithNext().forEach { (a,b) -> drawLine(entityColor, a, b, 2f) }
                         "CIRCLE" -> if (entity.points.size >= 2) {
                             val c = entity.points[0]; val edge = entity.points[1]
                             drawCircle(Color.White, hypot((edge.x-c.x).toDouble(), (edge.y-c.y).toDouble()).toFloat(), c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
                         }
                         "RECTANGLE" -> if (entity.points.size >= 2) {
                             val a = entity.points[0]; val b = entity.points[1]
-                            drawRect(Color.White, topLeft = Offset(minOf(a.x,b.x), minOf(a.y,b.y)), size = androidx.compose.ui.geometry.Size(kotlin.math.abs(b.x-a.x), kotlin.math.abs(b.y-a.y)), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                            drawRect(entityColor, topLeft = Offset(minOf(a.x,b.x), minOf(a.y,b.y)), size = androidx.compose.ui.geometry.Size(kotlin.math.abs(b.x-a.x), kotlin.math.abs(b.y-a.y)), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
                         }
                         "ARC" -> {
                             val pts = arcPoints(entity.points)
                             pts.zipWithNext().forEach { (a,b) -> drawLine(Color.White, a, b, 2f) }
                         }
                         "TEXT" -> if (entity.points.isNotEmpty()) {
-                            val paint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 16f; isAntiAlias = true }
+                            val paint = Paint().apply { color = entityColor.toArgb(); textSize = 16f; isAntiAlias = true }
                             drawContext.canvas.nativeCanvas.drawText(entity.text, entity.points[0].x, entity.points[0].y, paint)
                         }
                     }
@@ -930,6 +961,30 @@ private fun ArkanApp() {
             }
         }
     }
+
+    if (showNewLayerDialog) AlertDialog(
+        onDismissRequest = { showNewLayerDialog = false },
+        title = { Text("إنشاء طبقة جديدة / NEW LAYER") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(newLayerName, { newLayerName = it }, label = { Text("اسم الطبقة") }, singleLine = true)
+            Text("اختر لون الطبقة", color = Color.LightGray)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0xFFFFFFFFL, 0xFFFF3030L, 0xFF2878FFFFL, 0xFF20C060L, 0xFFFFD21FL, 0xFF20D8E8L, 0xFF00C8A0L, 0xFFFF9633L).forEach { colorValue ->
+                    Box(Modifier.size(30.dp).background(Color(colorValue), RoundedCornerShape(6.dp)).pointerInput(colorValue) { detectTapGestures(onTap = { newLayerColor = colorValue }) })
+                }
+            }
+            Text("الطبقة الجديدة ستصبح الطبقة الحالية للرسم.", color = Color.LightGray, fontSize = 11.sp)
+        } },
+        confirmButton = { TextButton(onClick = {
+            val name = newLayerName.trim()
+            when {
+                name.isBlank() -> status = "أدخل اسم الطبقة."
+                cadLayers.any { it.name.equals(name, true) } -> status = "اسم الطبقة موجود مسبقاً."
+                else -> { cadLayers = cadLayers + CadLayer(name, newLayerColor); currentCadLayer = name; showNewLayerDialog = false; status = "تم إنشاء الطبقة $name وأصبحت الحالية." }
+            }
+        }) { Text("إنشاء") } },
+        dismissButton = { TextButton(onClick = { showNewLayerDialog = false }) { Text("إلغاء") } }
+    )
 
     if (showClearConfirm) AlertDialog(
         onDismissRequest = { showClearConfirm = false },
