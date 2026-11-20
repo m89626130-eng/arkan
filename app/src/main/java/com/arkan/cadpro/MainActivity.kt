@@ -494,8 +494,8 @@ private fun ArkanApp() {
                 CadPaletteButton("−", "ZOOM", { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f) })
             }
             Spacer(Modifier.height(6.dp))
-            Box(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp))) {
-            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
+            Box(Modifier.fillMaxWidth().height(360.dp)) {
+            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color.Black).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
                         cadRedo = emptyList()
