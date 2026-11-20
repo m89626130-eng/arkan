@@ -1095,7 +1095,8 @@ private fun ArkanApp() {
                     "DIMENSION" -> listOf("ALIGNED" to "↗", "LINEAR" to "↔", "ANGULAR" to "∠")
                     "DIAMETER" -> listOf("RADIUS" to "R", "DIAMETER" to "Ø", "ARC LENGTH" to "⌒")
                     "ANNOTATION" -> listOf("TEXT" to "T", "DIMENSION" to "↔")
-                    else -> listOf("PIPE" to "━", "MANHOLE" to "◉", "DIAMETER" to "Ø", "SLOPE" to "%")
+                    "SEWER NETWORK" -> listOf("PIPE" to "━", "MANHOLE" to "◉", "DIAMETER" to "Ø", "SLOPE" to "%")
+                    "EXPORT" -> listOf("CSV" to "▦", "PDF" to "▤", "KML" to "◎", "DXF" to "⌘", "DWG" to "▧")
                 }
                 commandItems.forEach { (tool, icon) ->
                     CadPaletteButton(icon, tool, {
@@ -1138,6 +1139,13 @@ private fun ArkanApp() {
                                 mode = if (tool == "DIMENSION") "DIMENSION" else "TEXT"
                                 cadDraft = emptyList()
                                 status = if (tool == "TEXT") "اكتب النص ثم المس مكان وضعه." else "حدد نقطتي بداية ونهاية البعد."
+                            }
+                            "EXPORT" -> when (tool) {
+                                "CSV" -> csvSaver.launch("ARKAN_Quantity_Report.csv")
+                                "PDF" -> pdfSaver.launch("ARKAN_Report.pdf")
+                                "KML" -> showKmlDialog = true
+                                "DXF" -> dxfSaver.launch("ARKAN_Sewer_Network.dxf")
+                                "DWG" -> dwgSaver.launch("ARKAN_Sewer_Network.dwg")
                             }
                             else -> when (tool) {
                                 "PIPE" -> { mode = "PIPE"; pipeStart = null; status = "حدد نقطة بداية الأنبوب ثم نهايته." }
@@ -1186,7 +1194,8 @@ private fun ArkanApp() {
                     Triple("DIMENSION", "↗", "DIMENSION"),
                     Triple("DIAMETER", "Ø", "DIAMETER"),
                     Triple("ANNOTATION", "T", "ANNOTATION"),
-                    Triple("SEWER NETWORK", "◎", "SEWER")
+                    Triple("SEWER NETWORK", "◎", "SEWER"),
+                    Triple("EXPORT", "⇧", "EXPORT")
                 ).forEach { (tab, icon, title) ->
                     CadPaletteButton(icon, title, { selectedCadTab = tab }, selected = selectedCadTab == tab)
                 }
@@ -1244,16 +1253,7 @@ private fun ArkanApp() {
                 }
                 Text("المجموع الكلي: %.2f م".format(Locale.US, drawnLayerTotals.values.sum()), color = Color(0xFF00C8A0), fontSize = 12.sp)
             }
-            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(onClick={csvSaver.launch("ARKAN_Quantity_Report.csv")}) { Text("تصدير CSV") }
-                Button(onClick={pdfSaver.launch("ARKAN_Report.pdf")}) { Text("PDF") }
-            }
-            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(onClick={showKmlDialog=true}) { Text("تصدير KML") }
-                Button(onClick={dxfSaver.launch("ARKAN_Sewer_Network.dxf")}) { Text("تصدير DXF") }
-                Button(onClick={dwgSaver.launch("ARKAN_Sewer_Network.dwg")}) { Text("تصدير DWG") }
-
-            }
+            Text("استخدم حافظة EXPORT لاختيار صيغة الملف المطلوبة.", color=Color(0xFF9AAAB2), fontSize=10.sp)
             Text("ملف DXF: $dxfFileName",color=Color.LightGray,fontSize=10.sp)
             if (importedSummary.isNotBlank()) Text("العناصر المستوردة: $importedSummary",color=Color(0xFF00C8A0),fontSize=10.sp)
             Text("ملف LSP: $lispName",color=Color.LightGray,fontSize=10.sp)
