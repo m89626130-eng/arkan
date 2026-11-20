@@ -1,0 +1,68 @@
+name: Build LibreDWG Android ARM64 tools
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/libredwg-android.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm64-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+
+      - name: Install Android NDK and CMake
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools ndk;27.2.12479018 cmake;3.22.1'
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git ninja-build file
+
+      - name: Get LibreDWG 0.14 source
+        run: git clone --depth 1 --branch 0.14 https://github.com/LibreDWG/libredwg.git libredwg
+
+      - name: Configure for Android ARM64
+        run: |
+          cmake -S libredwg -B build-libredwg -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLIBREDWG_LIBONLY=OFF \
+            -DLIBREDWG_DISABLE_WRITE=OFF \
+            -DLIBREDWG_DISABLE_JSON=OFF \
+            -DBUILD_TESTING=OFF \
+            -DENABLE_LTO=OFF \
+            -DDISABLE_WERROR=ON
+
+      - name: Build DWG import and export converters
+        run: |
+          cmake --build build-libredwg --target dwg2dxf dxf2dwg --parallel 2
+          mkdir -p dist
+          find build-libredwg -type f -name dwg2dxf -exec cp {} dist/dwg2dxf-arm64 \;
+          find build-libredwg -type f -name dxf2dwg -exec cp {} dist/dxf2dwg-arm64 \;
+          test -s dist/dwg2dxf-arm64
+          test -s dist/dxf2dwg-arm64
+          file dist/dwg2dxf-arm64 dist/dxf2dwg-arm64
+          readelf -h dist/dwg2dxf-arm64 | grep -E 'Class:|Machine:'
+          readelf -h dist/dxf2dwg-arm64 | grep -E 'Class:|Machine:'
+          dist/dwg2dxf-arm64 --version
+          dist/dxf2dwg-arm64 --version
+
+      - name: Upload ARM64 converter test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libredwg-android-arm64-tools-test
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
