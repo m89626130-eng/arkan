@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -135,6 +136,25 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { ArkanApp() } }
 }
 
+
+@Composable
+private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, selected: Boolean = false) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.width(72.dp).height(70.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 3.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (selected) Color(0xFF16434A) else Color(0xFF202A31),
+            contentColor = Color.White
+        )
+    ) {
+        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text(icon, color = Color(0xFF53D8E5), fontSize = 21.sp, lineHeight = 23.sp)
+            Text(label, color = Color.White, fontSize = 9.sp, maxLines = 1)
+        }
+    }
+}
+
 @Composable
 private fun ArkanApp() {
     var pipes by remember { mutableStateOf(listOf<Pipe>()) }
@@ -146,12 +166,13 @@ private fun ArkanApp() {
     var newLayerColor by remember { mutableStateOf(0xFF00C8A0L) }
     var cadColorValue by remember { mutableStateOf(0xFFFFC857L) }
     var showLayerMenu by remember { mutableStateOf(false) }
-    var showDrawTools by remember { mutableStateOf(true) }
-    var showEditTools by remember { mutableStateOf(true) }
-    var showLayerTools by remember { mutableStateOf(true) }
-    var showMeasureTools by remember { mutableStateOf(true) }
-    var showDiameterTools by remember { mutableStateOf(true) }
-    var showSewerNetworkTools by remember { mutableStateOf(true) }
+    var showDrawTools by remember { mutableStateOf(false) }
+    var showEditTools by remember { mutableStateOf(false) }
+    var showLayerTools by remember { mutableStateOf(false) }
+    var showMeasureTools by remember { mutableStateOf(false) }
+    var showDiameterTools by remember { mutableStateOf(false) }
+    var showSewerNetworkTools by remember { mutableStateOf(false) }
+    var selectedCadTab by remember { mutableStateOf("DRAW") }
     var showSlopeDialog by remember { mutableStateOf(false) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
@@ -437,286 +458,41 @@ private fun ArkanApp() {
 
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF00C8A0), background = Color(0xFF101418), surface = Color(0xFF1B2329))) {
+
         Column(
-            Modifier.fillMaxSize()
-                .background(Color(0xFF101418))
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(10.dp)
+            Modifier.fillMaxSize().background(Color(0xFF101418))
+                .statusBarsPadding().navigationBarsPadding()
+                .verticalScroll(rememberScrollState()).padding(8.dp)
         ) {
-            Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
-            Text("V1.12 • أدوات الرسم CAD الأساسية", color = Color.LightGray, fontSize = 12.sp)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = {
-                        if (cadEntities.isNotEmpty()) {
-                            cadRedo = cadRedo + cadEntities.last()
-                            cadEntities = cadEntities.dropLast(1)
-                            status = "Undo: تم التراجع عن آخر عنصر CAD."
-                        } else status = "لا توجد عناصر CAD للتراجع."
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 6.dp)
-                ) { Text("↶", fontSize = 22.sp) }
-                OutlinedButton(
-                    onClick = {
-                        if (cadRedo.isNotEmpty()) {
-                            cadEntities = cadEntities + cadRedo.last()
-                            cadRedo = cadRedo.dropLast(1)
-                            status = "Redo: تمت إعادة آخر عنصر CAD."
-                        } else status = "لا توجد خطوة لإعادتها."
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 6.dp)
-                ) { Text("↷", fontSize = 22.sp) }
-                Button(
-                    onClick = {
-                        if (referenceEasting.isBlank() || referenceNorthing.isBlank()) {
-                            showGeoDialog = true
-                            status = "أدخل إحداثيات UTM المرجعية أولاً، ثم اضغط SAVE."
-                        } else dxfSaver.launch("ARKAN_DRAWING.dxf")
-                    },
-                    modifier = Modifier.weight(1.5f),
-                    contentPadding = PaddingValues(horizontal = 8.dp)
-                ) { Text("▤ SAVE", fontSize = 14.sp) }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { showGeoDialog = true }, modifier = Modifier.weight(1f)) { Text("النقطة المرجعية UTM") }
-                    Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("استيراد DXF") }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("ARKAN CAD PRO", color = Color(0xFF53D8E5), fontSize = 20.sp)
+                    Text("CAD WORKSPACE", color = Color(0xFF9AAAB2), fontSize = 9.sp)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { dwgPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("استيراد DWG") }
-                    OutlinedButton(onClick = { showClearConfirm = true }, modifier = Modifier.weight(1f)) { Text("مسح الرسم") }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(
-                        onClick = { showSewerNetworkTools = !showSewerNetworkTools },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (showSewerNetworkTools) "شبكة الصرف الصحي  ▾" else "شبكة الصرف الصحي  ▸")
-                    }
-                    if (showSewerNetworkTools) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                            Button(
-                                onClick = { mode = "PIPE"; pipeStart = null; status = "رسم الأنبوب: حدد نقطة البداية ثم نقطة النهاية." },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("━  رسم الأنبوب") }
-                            Button(
-                                onClick = { showManholeDialog = true },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("◉  إضافة المناهيل") }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { showPipeDiameterMenu = true },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("Ø  قطر الأنبوب: ${pipeLayer.substringAfterLast("-")} مم") }
-                            OutlinedButton(
-                                onClick = { showSlopeDialog = true },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("٪  الميل: $targetSlopePercent%") }
-                        }
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { showPipeDiameterMenu = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("اختر قطر الأنبوب") }
-                            DropdownMenu(
-                                expanded = showPipeDiameterMenu,
-                                onDismissRequest = { showPipeDiameterMenu = false }
-                            ) {
-                                listOf("250", "315", "400", "500", "600", "700").forEach { diameter ->
-                                    DropdownMenuItem(
-                                        text = { Text("$diameter مم") },
-                                        onClick = {
-                                            pipeLayer = "PIPE-$diameter"
-                                            showPipeDiameterMenu = false
-                                            status = "تم اختيار قطر $diameter مم"
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { viewZoom = (viewZoom * 1.25f).coerceAtMost(6f); status = "تكبير العرض: ${(viewZoom * 100).toInt()}%" }, modifier = Modifier.weight(1f)) { Text("＋ تكبير") }
-                    OutlinedButton(onClick = { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f); status = "تصغير العرض: ${(viewZoom * 100).toInt()}%" }, modifier = Modifier.weight(1f)) { Text("－ تصغير") }
-                    OutlinedButton(onClick = { viewZoom = 1f; status = "تمت إعادة مستوى التقريب إلى 100%." }, modifier = Modifier.weight(1f)) { Text("ملاءمة") }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(onClick = { showDrawTools = !showDrawTools }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (showDrawTools) "DRAW  ▾  أدوات الرسم" else "DRAW  ▸  أدوات الرسم")
-                    }
-                    if (showDrawTools) {
-                        Text("أدوات الرسم CAD", color = Color(0xFF00C8A0), fontSize = 13.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("LINE", "POLYLINE", "CIRCLE").forEach { tool ->
-                                OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("RECTANGLE", "ARC", "TEXT").forEach { tool ->
-                                OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
-                            }
-                        }
-                    }
-                    OutlinedButton(onClick = { showEditTools = !showEditTools }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (showEditTools) "EDIT  ▾  أدوات التعديل" else "EDIT  ▸  أدوات التعديل")
-                    }
-                    if (showEditTools) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("MOVE", "COPY", "ROTATE", "MIRROR", "DELETE").forEach { tool ->
-                                OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("TRIM", "EXTEND", "STRETCH").forEach { tool ->
-                                OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; "STRETCH" -> "حدد العنصر ثم اختر الرأس المراد سحبه ثم موضعه الجديد."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("FILLET", "CHAMFER", "SCALE").forEach { tool ->
-                                OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(cadOffsetDistance,{cadOffsetDistance=it},label={Text("مسافة OFFSET م")},modifier=Modifier.weight(1f),singleLine=true)
-                            OutlinedTextField(cadCornerDistance,{cadCornerDistance=it},label={Text("FILLET R / CHAMFER م")},modifier=Modifier.weight(1f),singleLine=true)
-                            OutlinedTextField(cadScaleFactor,{cadScaleFactor=it},label={Text("SCALE factor")},modifier=Modifier.weight(1f),singleLine=true)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { mode = "TEXT"; cadDraft = emptyList(); status = "اكتب النص ثم المس مكان وضعه على الرسم." }, modifier = Modifier.weight(1f)) { Text("TEXT") }
-                            OutlinedTextField(cadTextValue, { cadTextValue = it }, label = { Text("محتوى النص") }, modifier = Modifier.weight(2f), singleLine = true)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("ARC", "RECTANGLE").forEach { tool ->
-                                OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
-                            }
-                            OutlinedButton(onClick = { if (cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList(); status = "تم إنهاء POLYLINE." } else status = "حدد نقطتين على الأقل."; cadDraft = emptyList() }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text("إنهاء", fontSize = 10.sp) }
-                        }
-                    }
-
-                        OutlinedButton(onClick = { mode = "DIMENSION"; cadDraft = emptyList(); status = "حدد نقطتي بداية ونهاية البعد على الرسم." }, modifier = Modifier.fillMaxWidth()) { Text("DIMENSION  |  قياس الأبعاد على الرسم") }
-                    }
-                    OutlinedButton(onClick = { showLayerTools = !showLayerTools }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (showLayerTools) "LAYER  ▾  الطبقات والعرض" else "LAYER  ▸  الطبقات والعرض")
-                    }
-                    if (showLayerTools) {
-                        Text("الطبقات / LAYERS", color = Color(0xFF00C8A0), fontSize = 13.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {                            Box(Modifier.weight(1f)) {
-                                OutlinedButton(onClick = { showLayerMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("الطبقة الحالية: $currentCadLayer") }
-                                DropdownMenu(expanded = showLayerMenu, onDismissRequest = { showLayerMenu = false }) {
-                                    cadLayers.forEach { layer -> DropdownMenuItem(text = { Text(layer.name) }, onClick = { currentCadLayer = layer.name; showLayerMenu = false; status = "الطبقة الحالية: ${layer.name}" }) }
-                                }
-                            }
-                            Button(onClick = { newLayerName = ""; newLayerColor = 0xFF00C8A0L; showNewLayerDialog = true }) { Text("＋ NEW LAYER") }
-                        }
-                        Text("COLOR — اختر لون العنصر ثم المسه لتغييره", color = Color(0xFF00C8A0), fontSize = 12.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf(0xFFFF4040L,0xFF3080FFFFL,0xFF20C060L,0xFFFFD21FL,0xFF20D8E8L,0xFFFFFFFFL,0xFFFF9633L).forEach { swatch ->
-                                Button(onClick = { cadColorValue = swatch; status = "تم اختيار لون العنصر." }, colors = ButtonDefaults.buttonColors(containerColor = Color(swatch)), contentPadding = PaddingValues(0.dp), modifier = Modifier.weight(1f).height(34.dp)) { Text(if (cadColorValue == swatch) "✓" else " ") }
-                            }
-                        }
-                        OutlinedButton(onClick = { mode = "COLOR"; cadEditSelection = null; status = "المس العنصر الذي تريد تغيير لونه." }, modifier = Modifier.fillMaxWidth()) { Text("COLOR  |  تغيير لون عنصر") }
-                        cadLayers.forEach { layer ->
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("●  ${layer.name}", color = Color(layer.color), fontSize = 11.sp)
-                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                    Text(if (layer.visible) "ظاهر" else "مخفي", color = Color.LightGray, fontSize = 10.sp)
-                                    TextButton(onClick = { cadLayers = cadLayers.map { if (it.name == layer.name) it.copy(visible = !it.visible) else it }; status = if (layer.visible) "تم إخفاء ${layer.name}" else "تم إظهار ${layer.name}" }) { Text(if (layer.visible) "إخفاء" else "إظهار") }
-                                    TextButton(onClick = { cadLayers = cadLayers.map { if (it.name == layer.name) it.copy(locked = !it.locked) else it }; status = if (layer.locked) "تم فتح ${layer.name}" else "تم قفل ${layer.name}" }) { Text(if (layer.locked) "فتح" else "قفل") }
-                                }
-                            }
-                        }
-
-                    }
-                }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Button(onClick = { lispPicker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("اختيار LSP") }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(onClick = { showDiameterTools = !showDiameterTools }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (showDiameterTools) "DIAMETER  ▾  أبعاد CAD" else "DIAMETER  ▸  أبعاد CAD")
-                }
-                if (showDiameterTools) {
-                    Text("أدوات الأبعاد الهندسية", color = Color(0xFF00C8A0), fontSize = 13.sp)
-                    listOf("ALIGNED", "LINEAR", "ANGULAR", "RADIUS", "DIAMETER", "ARC LENGTH").chunked(3).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            row.forEach { tool ->
-                                OutlinedButton(onClick = {
-                                    mode = "DIM_" + tool.replace(" ", "_")
-                                    cadDraft = emptyList()
-                                    status = when(tool) {
-                                        "ANGULAR" -> "حدد رأس الزاوية ثم نقطة على الضلع الأول ثم نقطة على الضلع الثاني."
-                                        "RADIUS" -> "المس الدائرة لإظهار نصف قطرها."
-                                        "DIAMETER" -> "المس الدائرة لإظهار قطرها."
-                                        "ARC LENGTH" -> "المس القوس لإظهار طول القوس."
-                                        else -> "حدد نقطتي قياس $tool."
-                                    }
-                                }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
-                            }
-                            repeat(3-row.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
-                }
-                OutlinedButton(onClick = { showMeasureTools = !showMeasureTools }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (showMeasureTools) "MEASURE  ▾  أدوات القياس" else "MEASURE  ▸  أدوات القياس")
-                }
-                if (showMeasureTools) {
-                    Text("اختر نوع القياس", color = Color(0xFF00C8A0), fontSize = 13.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                        listOf("DISTANCE", "AREA").forEach { tool ->
-                            OutlinedButton(onClick = { mode = "MEASURE_$tool"; measureDraft = emptyList(); status = if (tool == "DISTANCE") "المس نقطة البداية ثم نقطة النهاية لقياس المسافة." else "حدد نقاط حدود المساحة، ثم اضغط إنهاء." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                        listOf("ARC LENGTH", "ID POINT").forEach { tool ->
-                            OutlinedButton(onClick = { mode = if (tool == "ARC LENGTH") "MEASURE_ARC_LENGTH" else "MEASURE_ID_POINT"; measureDraft = emptyList(); status = if (tool == "ARC LENGTH") "المس قوس ARC لمعرفة طوله." else "المس نقطة لعرض إحداثياتها." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
-                        }
-                    }
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("إظهار القياس على الرسم", color = Color.White, fontSize = 12.sp)
-                        Switch(checked = measureShowOnDrawing, onCheckedChange = { measureShowOnDrawing = it })
-                        Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = { measureDraft = emptyList(); mode = "PIPE"; status = "تم إلغاء القياس." }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("إلغاء") }
-                    }
-                    if (measureLastResult.isNotBlank()) {
-                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF17232B)), modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text("MEASUREMENT RESULT", color = Color(0xFF00C8A0), fontSize = 11.sp)
-                                Text(measureLastResult, color = Color.White, fontSize = 13.sp)
-                            }
-                        }
-                    }
-                    if (mode == "MEASURE_AREA") {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = {
-                                if (measureDraft.size >= 3) {
-                                    val twiceArea = measureDraft.indices.sumOf { i ->
-                                        val a = measureDraft[i]; val b = measureDraft[(i + 1) % measureDraft.size]
-                                        (a.x.toDouble() * b.y - b.x.toDouble() * a.y)
-                                    }
-                                    val area = kotlin.math.abs(twiceArea) / 2.0 / (PX_PER_METER * PX_PER_METER)
-                                    val perimeter = measureDraft.zipWithNext().sumOf { (a,b) -> hypot((b.x-a.x).toDouble(),(b.y-a.y).toDouble()) / PX_PER_METER } + hypot((measureDraft.first().x-measureDraft.last().x).toDouble(),(measureDraft.first().y-measureDraft.last().y).toDouble()) / PX_PER_METER
-                                    measureLastResult = "Area: %.3f m²   |   Perimeter: %.3f m".format(Locale.US, area, perimeter)
-                                    status = measureLastResult
-                                } else status = "يلزم تحديد ثلاث نقاط على الأقل لحساب المساحة."
-                                measureDraft = emptyList(); mode = "PIPE"
-                            }, modifier = Modifier.weight(1f)) { Text("إنهاء حساب AREA") }
-                            OutlinedButton(onClick = { measureDraft = emptyList(); mode = "PIPE"; status = "تم إلغاء قياس المساحة." }, modifier = Modifier.weight(1f)) { Text("إلغاء") }
-                        }
-                    }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CadPaletteButton("↶", "UNDO", {
+                        if (cadEntities.isNotEmpty()) { cadRedo = cadRedo + cadEntities.last(); cadEntities = cadEntities.dropLast(1); status = "Undo: تم التراجع عن آخر عنصر CAD." }
+                        else status = "لا توجد عناصر CAD للتراجع."
+                    })
+                    CadPaletteButton("↷", "REDO", {
+                        if (cadRedo.isNotEmpty()) { cadEntities = cadEntities + cadRedo.last(); cadRedo = cadRedo.dropLast(1); status = "Redo: تمت إعادة آخر خطوة." }
+                        else status = "لا توجد خطوة لإعادتها."
+                    })
+                    CadPaletteButton("▣", "SAVE", {
+                        if (referenceEasting.isBlank() || referenceNorthing.isBlank()) { showGeoDialog = true; status = "أدخل إحداثيات UTM المرجعية أولاً." }
+                        else dxfSaver.launch("ARKAN_DRAWING.dxf")
+                    })
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedTextField(trenchWidth, { trenchWidth = it }, label = { Text("عرض الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
-                OutlinedTextField(trenchDepth, { trenchDepth = it }, label = { Text("عمق الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
+            Spacer(Modifier.height(5.dp))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                CadPaletteButton("⌖", "UTM", { showGeoDialog = true })
+                CadPaletteButton("⇧", "OPEN DXF", { dxfPicker.launch(arrayOf("*/*")) })
+                CadPaletteButton("⇧", "OPEN DWG", { dwgPicker.launch(arrayOf("*/*")) })
+                CadPaletteButton("⌫", "CLEAR", { showClearConfirm = true })
+                CadPaletteButton("+", "ZOOM", { viewZoom = (viewZoom * 1.25f).coerceAtMost(8f) })
+                CadPaletteButton("−", "ZOOM", { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f) })
             }
-            Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp))) {
             Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
@@ -1270,6 +1046,150 @@ private fun ArkanApp() {
                 OutlinedButton(onClick = { viewZoom = (viewZoom * 1.25f).coerceAtMost(8f); status = "تكبير: ${(viewZoom * 100).toInt()}%" }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(46.dp)) { Text("+", fontSize = 25.sp) }
                 OutlinedButton(onClick = { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f); status = "تصغير: ${(viewZoom * 100).toInt()}%" }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(46.dp)) { Text("−", fontSize = 25.sp) }
             }
+            }
+            Spacer(Modifier.height(6.dp))
+
+            Spacer(Modifier.height(8.dp))
+            if (selectedCadTab == "EDIT") {
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(cadOffsetDistance, { cadOffsetDistance = it }, label = { Text("OFFSET m") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(cadCornerDistance, { cadCornerDistance = it }, label = { Text("FILLET / CHAMFER") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(cadScaleFactor, { cadScaleFactor = it }, label = { Text("SCALE") }, modifier = Modifier.weight(1f), singleLine = true)
+                }
+            }
+            if (selectedCadTab == "ANNOTATION" || (selectedCadTab == "DRAW" && mode == "TEXT")) {
+                OutlinedTextField(cadTextValue, { cadTextValue = it }, label = { Text("TEXT CONTENT") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            }
+            if (selectedCadTab == "COLOR") {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    listOf("RED" to 0xFFFF4040L, "BLUE" to 0xFF3080FFFFL, "GREEN" to 0xFF20C060L, "YELLOW" to 0xFFFFD21FL, "CYAN" to 0xFF20D8E8L, "WHITE" to 0xFFFFFFFFL, "ORANGE" to 0xFFFF9633L).forEach { pair ->
+                        CadPaletteButton("●", pair.first, { cadColorValue = pair.second }, selected = cadColorValue == pair.second)
+                    }
+                }
+            }
+            if (selectedCadTab == "LAYER") {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    CadPaletteButton("＋", "NEW LAYER", { newLayerName = ""; showNewLayerDialog = true })
+                    CadPaletteButton("▤", "CURRENT", { showLayerMenu = true })
+                    cadLayers.forEach { layer ->
+                        CadPaletteButton(if (layer.visible) "◉" else "○", layer.name.take(8), {
+                            cadLayers = cadLayers.map { item -> if (item.name == layer.name) item.copy(visible = !item.visible) else item }
+                            status = if (layer.visible) "تم إخفاء " + layer.name else "تم إظهار " + layer.name
+                        }, selected = currentCadLayer == layer.name)
+                    }
+                }
+            }
+            if (selectedCadTab == "SEWER NETWORK") {
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(trenchWidth, { trenchWidth = it }, label = { Text("TRENCH WIDTH m") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(trenchDepth, { trenchDepth = it }, label = { Text("TRENCH DEPTH m") }, modifier = Modifier.weight(1f), singleLine = true)
+                }
+            }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                val commandItems: List<Pair<String, String>> = when (selectedCadTab) {
+                    "DRAW" -> listOf("LINE" to "╱", "POLYLINE" to "⌁", "CIRCLE" to "◯", "RECTANGLE" to "▭", "ARC" to "⌒", "TEXT" to "T")
+                    "EDIT" -> listOf("MOVE" to "✥", "COPY" to "▣", "ROTATE" to "⟳", "MIRROR" to "⇄", "TRIM" to "✂", "EXTEND" to "↗", "STRETCH" to "↔", "OFFSET" to "⇉", "FILLET" to "⌒", "CHAMFER" to "⌜", "SCALE" to "⤢", "DELETE" to "⌫")
+                    "LAYER" -> listOf("NEW LAYER" to "＋", "CURRENT LAYER" to "▤", "LOCK/UNLOCK" to "▣")
+                    "COLOR" -> listOf("APPLY COLOR" to "◉")
+                    "MEASURE" -> listOf("DISTANCE" to "↔", "AREA" to "▱", "ARC LENGTH" to "⌒", "ID POINT" to "⌖")
+                    "DIMENSION" -> listOf("ALIGNED" to "↗", "LINEAR" to "↔", "ANGULAR" to "∠")
+                    "DIAMETER" -> listOf("RADIUS" to "R", "DIAMETER" to "Ø", "ARC LENGTH" to "⌒")
+                    "ANNOTATION" -> listOf("TEXT" to "T", "DIMENSION" to "↔")
+                    else -> listOf("PIPE" to "━", "MANHOLE" to "◉", "DIAMETER" to "Ø", "SLOPE" to "%")
+                }
+                commandItems.forEach { (tool, icon) ->
+                    CadPaletteButton(icon, tool, {
+                        when (selectedCadTab) {
+                            "DRAW" -> { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة " + tool + ": حدد نقاط الرسم." }
+                            "EDIT" -> {
+                                finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList()
+                                status = when (tool) {
+                                    "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."
+                                    "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."
+                                    "STRETCH" -> "حدد العنصر ثم اختر الرأس ثم موضعه الجديد."
+                                    else -> "اختر العنصر ثم حدد نقاط تنفيذ " + tool
+                                }
+                            }
+                            "LAYER" -> when (tool) {
+                                "NEW LAYER" -> { newLayerName = ""; showNewLayerDialog = true }
+                                "CURRENT LAYER" -> showLayerMenu = true
+                                else -> {
+                                    cadLayers = cadLayers.map { item -> if (item.name == currentCadLayer) item.copy(locked = !item.locked) else item }
+                                    status = "تم تبديل حالة قفل الطبقة الحالية."
+                                }
+                            }
+                            "COLOR" -> { mode = "COLOR"; cadEditSelection = null; status = "المس العنصر الذي تريد تغيير لونه." }
+                            "MEASURE" -> {
+                                mode = when (tool) {
+                                    "DISTANCE" -> "MEASURE_DISTANCE"
+                                    "AREA" -> "MEASURE_AREA"
+                                    "ARC LENGTH" -> "MEASURE_ARC_LENGTH"
+                                    else -> "MEASURE_ID_POINT"
+                                }
+                                measureDraft = emptyList()
+                                status = "اختر نقاط/عنصر قياس " + tool
+                            }
+                            "DIMENSION", "DIAMETER" -> {
+                                mode = "DIM_" + tool.replace(" ", "_")
+                                cadDraft = emptyList()
+                                status = "حدد العناصر أو النقاط لتنفيذ " + tool
+                            }
+                            "ANNOTATION" -> {
+                                mode = if (tool == "DIMENSION") "DIMENSION" else "TEXT"
+                                cadDraft = emptyList()
+                                status = if (tool == "TEXT") "اكتب النص ثم المس مكان وضعه." else "حدد نقطتي بداية ونهاية البعد."
+                            }
+                            else -> when (tool) {
+                                "PIPE" -> { mode = "PIPE"; pipeStart = null; status = "حدد نقطة بداية الأنبوب ثم نهايته." }
+                                "MANHOLE" -> showManholeDialog = true
+                                "DIAMETER" -> showPipeDiameterMenu = true
+                                "SLOPE" -> showSlopeDialog = true
+                            }
+                        }
+                    })
+                }
+                if (mode == "POLYLINE" || mode == "MEASURE_AREA") {
+                    CadPaletteButton("✓", "FINISH", {
+                        if (mode == "POLYLINE") {
+                            if (cadDraft.size >= 2) {
+                                cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
+                                cadRedo = emptyList()
+                                status = "تم إنهاء POLYLINE."
+                            } else status = "حدد نقطتين على الأقل."
+                            cadDraft = emptyList()
+                        } else {
+                            if (measureDraft.size >= 3) {
+                                val twiceArea = measureDraft.indices.sumOf { i ->
+                                    val a = measureDraft[i]; val b = measureDraft[(i + 1) % measureDraft.size]
+                                    a.x.toDouble() * b.y - b.x.toDouble() * a.y
+                                }
+                                val area = kotlin.math.abs(twiceArea) / 2.0 / (PX_PER_METER * PX_PER_METER)
+                                val perimeter = measureDraft.indices.sumOf { i ->
+                                    val a = measureDraft[i]; val b = measureDraft[(i + 1) % measureDraft.size]
+                                    hypot((b.x-a.x).toDouble(), (b.y-a.y).toDouble()) / PX_PER_METER
+                                }
+                                measureLastResult = "Area: %.2f m² | Perimeter: %.2f m".format(Locale.US, area, perimeter)
+                                status = measureLastResult
+                            } else status = "يلزم تحديد ثلاث نقاط على الأقل."
+                            measureDraft = emptyList(); mode = "PIPE"
+                        }
+                    })
+                }
+            }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(
+                    Triple("DRAW", "╱", "DRAW"),
+                    Triple("EDIT", "✎", "EDIT"),
+                    Triple("LAYER", "▤", "LAYER"),
+                    Triple("COLOR", "◉", "COLOR"),
+                    Triple("MEASURE", "↔", "MEASURE"),
+                    Triple("DIMENSION", "↗", "DIMENSION"),
+                    Triple("DIAMETER", "Ø", "DIAMETER"),
+                    Triple("ANNOTATION", "T", "ANNOTATION"),
+                    Triple("SEWER NETWORK", "◎", "SEWER")
+                ).forEach { (tab, icon, title) ->
+                    CadPaletteButton(icon, title, { selectedCadTab = tab }, selected = selectedCadTab == tab)
+                }
             }
             Spacer(Modifier.height(6.dp))
             Text("كل مربع = 1 متر (مقياس تجريبي) • $status", color=Color.White,fontSize=11.sp)
