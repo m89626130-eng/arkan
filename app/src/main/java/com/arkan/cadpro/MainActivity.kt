@@ -753,7 +753,6 @@ private object DxfKmlImporter {
     private data class DxfLabel(val east: Double, val north: Double, val text: String)
     fun convertManual(manholes: List<Manhole>, pipes: List<Pipe>): Pair<String, Int> {
         require(manholes.isNotEmpty()) { "لا توجد مناهيل للتصدير" }
-        require(manholes.all { it.coordinatesKnown }) { "إحداثيات بعض المناهيل غير مرتبطة بمخطط جغرافي بعد. استورد DXF مرجعاً جغرافياً قبل تصدير KML." }
         val placemarks = StringBuilder()
         manholes.forEach { mh ->
             val geo = utmToWgs84(mh.easting, mh.northing, mh.altitude)
