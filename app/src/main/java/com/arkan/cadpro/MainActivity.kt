@@ -102,8 +102,6 @@ private fun ArkanApp() {
     var mhEasting by remember { mutableStateOf("") }
     var mhGroundLevel by remember { mutableStateOf("") }
     var mhInvertLevel by remember { mutableStateOf("") }
-    var mhFirstType by remember { mutableStateOf("AS") }
-    var showMhFirstTypeMenu by remember { mutableStateOf(false) }
     var pendingManhole by remember { mutableStateOf<Manhole?>(null) }
     val context = LocalContext.current
 
@@ -266,7 +264,7 @@ private fun ArkanApp() {
                 .padding(10.dp)
         ) {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
-            Text("V1.8 • اختيار أقطار الأنابيب", color = Color.LightGray, fontSize = 12.sp)
+            Text("V1.10 • حساب المناهيل والميول تلقائياً", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }) { Text("استيراد DXF") }
@@ -289,8 +287,9 @@ private fun ArkanApp() {
                 }
                 Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("اختيار LSP") }
             }
-            OutlinedTextField(targetSlopePercent, { targetSlopePercent = it }, label = { Text("نسبة الميل المطلوبة (%)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("عند رسم الأنبوب من منهول له INV إلى منهول بلا INV، يحسب البرنامج INV للمنهول الثاني تلقائياً حسب طول الأنبوب.", color = Color.LightGray, fontSize = 10.sp)
+            Text("إعدادات الأنبوب", color = Color(0xFF00C8A0), fontSize = 14.sp)
+            OutlinedTextField(targetSlopePercent, { targetSlopePercent = it }, label = { Text("نسبة ميل الأنبوب المطلوبة (%)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Text("مثال: 0.50% — بعد ربط المنهولين، يحسب INV للمنهول التالي تلقائياً من طول الأنبوب.", color = Color.LightGray, fontSize = 10.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(trenchWidth, { trenchWidth = it }, label = { Text("عرض الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
                 OutlinedTextField(trenchDepth, { trenchDepth = it }, label = { Text("عمق الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -321,7 +320,9 @@ private fun ArkanApp() {
                                     manholes = manholes.map { mh ->
                                         if (mh.id == endMh.id) {
                                             val calculatedDepth = mh.groundLevel?.let { it - calculatedInv } ?: mh.depth
-                                            mh.copy(invertLevel = calculatedInv, depth = calculatedDepth)
+                                            val calculatedLength = if (calculatedDepth >= 1.70) 0.7318 else 1.10
+                                            val calculatedWidth = if (calculatedDepth >= 1.70) 0.7318 else 0.70
+                                            mh.copy(invertLevel = calculatedInv, depth = calculatedDepth, length = calculatedLength, width = calculatedWidth)
                                         } else mh
                                     }
                                     status = "طول الأنبوب: %.2f م | الميل: %.2f%% | تم حساب INV للمنهول %s = %.3f".format(Locale.US, lengthM, slope, endMh.id, calculatedInv)
@@ -461,41 +462,30 @@ private fun ArkanApp() {
         onDismissRequest={showManholeDialog=false}, title={Text("بيانات المنهول")},
         text={ Column(Modifier.verticalScroll(rememberScrollState())) {
             OutlinedTextField(mhId,{mhId=it},label={Text("رقم المنهول")},singleLine=true)
-            OutlinedTextField(mhDepth,{mhDepth=it},label={Text("العمق (م)")},singleLine=true)
-            val previewDepth = (mhGroundLevel.toDoubleOrNull()?.let { gl -> mhInvertLevel.toDoubleOrNull()?.let { inv -> gl - inv } }) ?: mhDepth.toDoubleOrNull() ?: 0.0
-            val automaticType = when { previewDepth <= 0.0 -> "غير معروف"; previewDepth <= 1.70 -> "AS"; previewDepth <= 3.00 -> "BS"; previewDepth <= 4.00 -> "CS"; else -> "CD" }
-            if (manholes.isEmpty()) {
-                Text("نوع المنهول الأول (اختيار يدوي):", color = Color(0xFF00C8A0))
-                Box {
-                    OutlinedButton(onClick = { showMhFirstTypeMenu = true }) { Text(mhFirstType) }
-                    DropdownMenu(expanded = showMhFirstTypeMenu, onDismissRequest = { showMhFirstTypeMenu = false }) {
-                        listOf("AS", "BS", "CS", "CD").forEach { type ->
-                            DropdownMenuItem(text = { Text(type) }, onClick = { mhFirstType = type; showMhFirstTypeMenu = false })
-                        }
-                    }
-                }
-            } else {
-                Text("نوع المنهول تلقائياً حسب العمق: $automaticType", color = Color(0xFF00C8A0))
-            }
-            OutlinedTextField(mhGroundLevel,{mhGroundLevel=it},label={Text("GL / منسوب سطح الأرض (اختياري)")},singleLine=true)
-            OutlinedTextField(mhInvertLevel,{mhInvertLevel=it},label={Text("INV / منسوب قاع الأنبوب (اختياري)")},singleLine=true)
-            Text("يُحدد نوع المنهول تلقائياً من العمق H، أو من الفرق GL - INV عند إدخالهما معاً. تُحدد الإحداثيات لاحقاً من المخطط الجغرافي عند توفر ربط DXF.")
+            OutlinedTextField(mhGroundLevel,{mhGroundLevel=it},label={Text("GL / منسوب سطح الأرض")},singleLine=true)
+            OutlinedTextField(mhInvertLevel,{mhInvertLevel=it},label={Text("INV / منسوب قاع الأنبوب (اتركه فارغاً للحساب التلقائي)")},singleLine=true)
+            val previewDepth = mhGroundLevel.toDoubleOrNull()?.let { gl -> mhInvertLevel.toDoubleOrNull()?.let { inv -> gl - inv } } ?: 0.0
+            val automaticType = when { previewDepth <= 0.0 -> "بانتظار INV"; previewDepth <= 1.70 -> "AS"; previewDepth <= 3.00 -> "BS"; previewDepth <= 4.00 -> "CS"; else -> "CD" }
+            Text("نوع المنهول تلقائي حسب H = GL - INV: $automaticType", color = Color(0xFF00C8A0))
+            Text("أدخل GL لكل منهول. أدخل INV للمنهول الأول؛ ويمكن ترك INV للمناهيل التالية فارغاً ليحسبه البرنامج من نسبة الميل عند رسم الأنبوب. لا يوجد اختيار يدوي للنوع.", color = Color.LightGray, fontSize = 11.sp)
+            Text("نسبة ميل الأنبوب التالي: $targetSlopePercent %", color = Color(0xFF00C8A0), fontSize = 12.sp)
         }},
         confirmButton={ TextButton(onClick={
             try {
                 val gl = mhGroundLevel.toDoubleOrNull()
                 val inv = mhInvertLevel.toDoubleOrNull()
-                require((mhGroundLevel.isBlank() && mhInvertLevel.isBlank()) || (gl != null && inv != null)) { "أدخل GL وINV معاً." }
-                val d = if (gl != null && inv != null) gl - inv else mhDepth.toDouble()
+                require(gl != null) { "أدخل منسوب سطح الأرض GL." }
+                require(mhInvertLevel.isBlank() || inv != null) { "قيمة INV غير صحيحة." }
+                val d = if (inv != null) gl - inv else 0.0
                 val n=0.0; val e=0.0
                 val id=mhId.trim().ifBlank { "MH-%02d".format(Locale.US, manholes.size + 1) }
-                require(d>0)
+                require(d >= 0.0) { "تحقق من GL وINV؛ يجب أن يكون GL أعلى من INV." }
                 require(id !in manholes.map { it.id }) { "رقم المنهول مستخدم مسبقاً." }
                 val length = if (d >= 1.70) 0.7318 else 1.10
                 val width = if (d >= 1.70) 0.7318 else 0.70
-                pendingManhole=Manhole(id,Offset.Zero,d,length,width,n,e,groundLevel=gl,invertLevel=inv,coordinatesKnown=false,manualType=if (manholes.isEmpty()) mhFirstType else null)
+                pendingManhole=Manhole(id,Offset.Zero,d,length,width,n,e,groundLevel=gl,invertLevel=inv,coordinatesKnown=false,manualType=null)
                 mode="MANHOLE";showManholeDialog=false;status="المس مساحة الرسم لتحديد موقع المنهول."
-            } catch(_:Exception) { status="أدخل العمق أو GL وINV بشكل صحيح، ولا تكرر رقم المنهول." }
+            } catch(e:Exception) { status=e.message ?: "تحقق من GL وINV ورقم المنهول." }
         }) { Text("التالي: تحديد الموقع") }},
         dismissButton={TextButton(onClick={showManholeDialog=false}) { Text("إلغاء") }}
     )
