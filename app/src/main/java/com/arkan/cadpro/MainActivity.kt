@@ -146,7 +146,7 @@ private fun ArkanApp() {
                 importedDiameterLengths = converted.diameterLengths
                 importedUnclassifiedGeometryLength = converted.unclassifiedGeometryLength
                 dxfFileName = uri.lastPathSegment ?: "DXF"
-                status = "تم استيراد هندسة DXF: $importedSummary. نظام الإحداثيات المفترض WGS84 / UTM 38N."
+                status = "تم استيراد هندسة DXF: $importedSummary. نظام الإحداثيات المفترض WGS84 / UTM Zone ${utmZone}N."
             } catch (e: Exception) { status = "تعذر فتح DXF: " + e.message }
         }
     }
@@ -295,7 +295,7 @@ private fun ArkanApp() {
             require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) { "إحداثيات UTM غير صحيحة." }
             val dxf = buildArkanDxf(pipes, effectiveManholes, e0, n0)
             context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
-            status = "تم تصدير DXF بإحداثيات UTM Zone 38N. تحقق من صحة النقطة المرجعية."
+            status = "تم تصدير DXF بإحداثيات UTM Zone ${utmZone}N. تحقق من صحة النقطة المرجعية."
         } catch (e: Exception) { status = "تعذر تصدير DXF: ${e.message}" }
     }
 
@@ -319,8 +319,8 @@ private fun ArkanApp() {
             val outputKml = importedKml ?: manualNetwork?.first ?: KmlPointWriter.point("ARKAN reference point", lon, lat)
             context.contentResolver.openOutputStream(uri)?.use { OutputStreamWriter(it, Charsets.UTF_8).use { writer -> writer.write(outputKml) } }
             status = when {
-                importedKml != null -> "تم تصدير شبكة DXF إلى KML."
-                manualNetwork != null -> "تم تصدير ${manholes.size} منهل و${manualNetwork.second} مقطع أنبوب بإحداثيات UTM Zone 38N."
+                importedKml != null -> "تم تصدير شبكة CAD إلى KML وفق UTM Zone ${utmZone}N."
+                manualNetwork != null -> "تم تصدير ${manholes.size} منهل و${manualNetwork.second} مقطع أنبوب بإحداثيات UTM Zone ${utmZone}N."
                 else -> "تم حفظ نقطة KML المرجعية."
             }
         } catch (e: Exception) { status = "تعذر تصدير KML: ${e.message}" }
