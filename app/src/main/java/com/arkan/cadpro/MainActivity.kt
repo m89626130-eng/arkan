@@ -1073,7 +1073,7 @@ private object DxfKmlImporter {
         for (e in entities) {
             val type = e.firstOrNull()?.value ?: continue
             val layer = e.firstOrNull { it.code == 8 }?.value ?: ""
-            if (type == "LINE" || type == "LWPOLYLINE") {
+            if (type == "LINE" || type == "LWPOLYLINE" || type == "CIRCLE" || type == "ARC") {
                 val pts = mutableListOf<Pair<Double, Double>>()
                 if (type == "LINE") {
                     val x1 = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull()
@@ -1081,6 +1081,21 @@ private object DxfKmlImporter {
                     val x2 = e.firstOrNull { it.code == 11 }?.value?.toDoubleOrNull()
                     val y2 = e.firstOrNull { it.code == 21 }?.value?.toDoubleOrNull()
                     if (x1 != null && y1 != null && x2 != null && y2 != null) { pts.add(x1 to y1); pts.add(x2 to y2) }
+                } else if (type == "CIRCLE" || type == "ARC") {
+                    val cx = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull()
+                    val cy = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull()
+                    val radius = e.firstOrNull { it.code == 40 }?.value?.toDoubleOrNull()
+                    if (cx != null && cy != null && radius != null && radius > 0.0) {
+                        val startAngle = if (type == "ARC") e.firstOrNull { it.code == 50 }?.value?.toDoubleOrNull() ?: 0.0 else 0.0
+                        val endAngle = if (type == "ARC") e.firstOrNull { it.code == 51 }?.value?.toDoubleOrNull() ?: 360.0 else 360.0
+                        var sweep = endAngle - startAngle
+                        while (sweep <= 0.0) sweep += 360.0
+                        val steps = (sweep / 7.5).toInt().coerceIn(8, 96)
+                        for (step in 0..steps) {
+                            val angle = Math.toRadians(startAngle + sweep * step / steps)
+                            pts.add((cx + radius * kotlin.math.cos(angle)) to (cy + radius * kotlin.math.sin(angle)))
+                        }
+                    }
                 } else {
                     var x: Double? = null
                     for (p in e.drop(1)) {
@@ -1091,6 +1106,8 @@ private object DxfKmlImporter {
                             x = null
                         }
                     }
+                    val flags = e.firstOrNull { it.code == 70 }?.value?.toIntOrNull() ?: 0
+                    if ((flags and 1) != 0 && pts.size > 2) pts.add(pts.first())
                 }
                 if (pts.size >= 2) {
                     val length = pts.zipWithNext().sumOf { (a, b) -> hypot(b.first - a.first, b.second - a.second) }
