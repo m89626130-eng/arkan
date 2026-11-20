@@ -471,8 +471,7 @@ private fun ArkanApp() {
 
         Column(
             Modifier.fillMaxSize().background(Color(0xFF101418))
-                .statusBarsPadding().navigationBarsPadding()
-                .verticalScroll(rememberScrollState()).padding(8.dp)
+                .statusBarsPadding().navigationBarsPadding().padding(8.dp)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
@@ -504,7 +503,7 @@ private fun ArkanApp() {
                 CadPaletteButton("−", "ZOOM", { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f) })
             }
             Spacer(Modifier.height(6.dp))
-            Box(Modifier.fillMaxWidth().height(400.dp)) {
+            Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp)) {
             Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color.Black).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
@@ -1210,6 +1209,7 @@ private fun ArkanApp() {
                 }
             }
             Spacer(Modifier.height(6.dp))
+            Column(Modifier.fillMaxWidth().heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
             Text("كل مربع = 1 متر (مقياس تجريبي) • $status", color=Color.White,fontSize=11.sp)
             Text("طول الأنابيب: %.2f م | المناهيل: %d | حفر المناهيل: %.2f م³".format(Locale.US,effectivePipeLength,if (importedKml != null) importedManholeCount else manholes.size,totalExcavation),color=Color(0xFF00C8A0),fontSize=12.sp)
             Text("حفر خنادق الأنابيب التقديري: %.2f م³".format(Locale.US,trenchVolume),color=Color(0xFF00C8A0),fontSize=12.sp)
@@ -1272,6 +1272,7 @@ private fun ArkanApp() {
                 Column(Modifier.heightIn(max=150.dp).verticalScroll(rememberScrollState())) {
                     effectiveManholes.forEach { mh -> Text("${mh.id} | ${mh.type} | H ${mh.depth}م | GL ${mh.groundLevel ?: "-"} | INV ${mh.invertLevel ?: "-"} | N ${mh.northing} | E ${mh.easting} | حفر %.2fم³".format(Locale.US,mh.excavation),color=Color(0xFFB8C7CE),fontSize=11.sp) }
                 }
+            }
             }
         }
     }
