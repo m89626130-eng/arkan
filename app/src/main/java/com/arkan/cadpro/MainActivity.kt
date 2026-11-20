@@ -428,6 +428,11 @@ private fun ArkanApp() {
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("TRIM", "EXTEND", "DELETE").forEach { tool ->
+                        OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(cadOffsetDistance,{cadOffsetDistance=it},label={Text("مسافة OFFSET م")},modifier=Modifier.weight(1f),singleLine=true)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
@@ -469,14 +474,72 @@ private fun ArkanApp() {
                     }
                 }, onTap = { tap ->
                     when {
-                        mode in listOf("MOVE","COPY","OFFSET") -> {
+                        mode == "DELETE" -> {
+                            val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
+                            if (hit != null && cadEntityDistance(tap,cadEntities[hit]) <= 28f) {
+                                cadRedo = cadRedo + cadEntities[hit]
+                                cadEntities = cadEntities.filterIndexed { index, _ -> index != hit }
+                                cadEditSelection = null
+                                status = "تم حذف العنصر."
+                            } else status = "لم يتم تحديد عنصر قريب."
+                        }
+                        mode in listOf("MOVE","COPY","OFFSET","TRIM","EXTEND") -> {
                             val selected = cadEditSelection
+                            val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
+                                ?.takeIf { cadEntityDistance(tap,cadEntities[it]) <= 28f }
                             if (selected == null) {
-                                val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
-                                if (hit != null && cadEntityDistance(tap,cadEntities[hit]) <= 28f) {
+                                if (hit == null) status = "لم يتم تحديد عنصر قريب؛ المس على العنصر نفسه."
+                                else {
                                     cadEditSelection = hit
-                                    status = "تم تحديد ${cadEntities[hit].type}. حدد نقطة/جهة التنفيذ."
-                                } else status = "لم يتم تحديد عنصر قريب؛ المس على العنصر نفسه."
+                                    status = when(mode) {
+                                        "TRIM" -> "تم تحديد حد القطع. المس العنصر المراد تشذيبه."
+                                        "EXTEND" -> "تم تحديد خط الحد. المس العنصر المراد تمديده."
+                                        else -> "تم تحديد ${cadEntities[hit].type}. حدد نقطة/جهة التنفيذ."
+                                    }
+                                }
+                            } else if (mode in listOf("TRIM","EXTEND")) {
+                                if (hit == null || hit == selected) status = "حدد عنصراً ثانياً مختلفاً."
+                                else {
+                                    val boundary = cadEntities[selected]
+                                    val target = cadEntities[hit]
+                                    if (boundary.type != "LINE" || target.type != "LINE" || boundary.points.size < 2 || target.points.size < 2) {
+                                        status = "TRIM وEXTEND يدعمان حالياً عناصر LINE فقط."
+                                    } else {
+                                        val a=boundary.points[0]; val b=boundary.points[1]
+                                        val c=target.points[0]; val d=target.points[1]
+                                        val rx=b.x-a.x; val ry=b.y-a.y
+                                        val sx=d.x-c.x; val sy=d.y-c.y
+                                        val den=rx*sy-ry*sx
+                                        if(kotlin.math.abs(den)<1e-5f) status = "الخطّان متوازيان ولا توجد نقطة تقاطع."
+                                        else {
+                                            val qx=c.x-a.x; val qy=c.y-a.y
+                                            val u=(qx*ry-qy*rx)/den
+                                            val t=(qx*sy-qy*sx)/den
+                                            val ix=a.x+t*rx; val iy=a.y+t*ry
+                                            val intersection=Offset(ix,iy)
+                                            if(mode=="TRIM") {
+                                                if(t !in 0f..1f || u !in 0f..1f) status = "لا يوجد تقاطع داخل حدود الخطين؛ لم يتم التشذيب."
+                                                else {
+                                                    val firstDist=hypot((tap.x-c.x).toDouble(),(tap.y-c.y).toDouble())
+                                                    val secondDist=hypot((tap.x-d.x).toDouble(),(tap.y-d.y).toDouble())
+                                                    val newPoints=if(firstDist<=secondDist) listOf(intersection,d) else listOf(c,intersection)
+                                                    cadEntities=cadEntities.toMutableList().also { it[hit]=target.copy(points=newPoints) }
+                                                    cadRedo=emptyList(); status="تم TRIM عند نقطة التقاطع."
+                                                }
+                                            } else {
+                                                if(t !in 0f..1f || (u in 0f..1f)) status = "لا توجد نقطة تمديد مناسبة خارج نهاية العنصر."
+                                                else {
+                                                    val firstDist=hypot((intersection.x-c.x).toDouble(),(intersection.y-c.y).toDouble())
+                                                    val secondDist=hypot((intersection.x-d.x).toDouble(),(intersection.y-d.y).toDouble())
+                                                    val newPoints=if(firstDist<secondDist) listOf(intersection,d) else listOf(c,intersection)
+                                                    cadEntities=cadEntities.toMutableList().also { it[hit]=target.copy(points=newPoints) }
+                                                    cadRedo=emptyList(); status="تم EXTEND إلى خط الحد."
+                                                }
+                                            }
+                                        }
+                                    }
+                                    cadEditSelection=null
+                                }
                             } else {
                                 val entity = cadEntities.getOrNull(selected)
                                 if (entity == null) { cadEditSelection = null; status = "العنصر المحدد غير موجود." }
