@@ -556,14 +556,18 @@ private fun ArkanApp() {
                                 OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
-
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf("RECTANGLE", "ARC", "TEXT").forEach { tool ->
+                                OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
+                            }
+                        }
                     }
                     OutlinedButton(onClick = { showEditTools = !showEditTools }, modifier = Modifier.fillMaxWidth()) {
                         Text(if (showEditTools) "EDIT  ▾  أدوات التعديل" else "EDIT  ▸  أدوات التعديل")
                     }
                     if (showEditTools) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("MOVE", "COPY", "ROTATE", "MIRROR").forEach { tool ->
+                            listOf("MOVE", "COPY", "ROTATE", "MIRROR", "DELETE").forEach { tool ->
                                 OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
@@ -1130,7 +1134,7 @@ private fun ArkanApp() {
                         }
                         "ARC" -> {
                             val pts = arcPoints(entity.points)
-                            pts.zipWithNext().forEach { (a,b) -> drawLine(Color.White, a, b, 2f) }
+                            pts.zipWithNext().forEach { (a,b) -> drawLine(entityColor, a, b, 2f) }
                         }
                         "DIMENSION", "DIM_ALIGNED", "DIM_LINEAR" -> if (entity.points.size >= 2) {
                             val a = entity.points[0]; val b = entity.points[1]
