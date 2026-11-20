@@ -238,6 +238,14 @@ private fun ArkanApp() {
         } catch (e: Exception) { status = "تعذر تصدير PDF: ${e.message}" }
     }
 
+    val dxfSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/dxf")) { uri: Uri? ->
+        if (uri != null) try {
+            val dxf = buildArkanDxf(pipes, effectiveManholes)
+            context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
+            status = "تم تصدير الرسم بصيغة DXF. الإحداثيات محلية بوحدة المتر حسب مساحة الرسم."
+        } catch (e: Exception) { status = "تعذر تصدير DXF: ${e.message}" }
+    }
+
     val kmlSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")) { uri: Uri? ->
         if (uri != null) try {
             val manualNetwork = if (importedKml == null && manholes.isNotEmpty()) DxfKmlImporter.convertManual(manholes, pipes) else null
@@ -419,11 +427,12 @@ private fun ArkanApp() {
                 Text("المجموع الكلي: %.2f م".format(Locale.US, drawnLayerTotals.values.sum()), color = Color(0xFF00C8A0), fontSize = 12.sp)
             }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                Button(onClick={xlsxSaver.launch("ARKAN_Quantity_Report.xlsx")}) { Text("تصدير Excel") }
+                Button(onClick={csvSaver.launch("ARKAN_Quantity_Report.csv")}) { Text("تصدير CSV") }
                 Button(onClick={pdfSaver.launch("ARKAN_Report.pdf")}) { Text("PDF") }
             }
             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                 Button(onClick={showKmlDialog=true}) { Text("تصدير KML") }
+                Button(onClick={dxfSaver.launch("ARKAN_Sewer_Network.dxf")}) { Text("تصدير DXF") }
                 Button(
                     onClick = {
                         pipes = emptyList()
@@ -502,6 +511,40 @@ private fun ArkanApp() {
         confirmButton={TextButton(onClick={showKmlDialog=false;kmlSaver.launch(if (importedKml != null || manholes.isNotEmpty()) "ARKAN_SEWER_NETWORK.kml" else "ARKAN_reference.kml")}) { Text("حفظ KML") }},
         dismissButton={TextButton(onClick={showKmlDialog=false}) { Text("إلغاء") }}
     )
+}
+
+
+private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>): String {
+    val out = StringBuilder()
+    fun pair(code: Int, value: Any) { out.append(code).append("\r\n").append(value).append("\r\n") }
+    fun entity(type: String, layer: String) { pair(0, type); pair(8, layer) }
+    pair(0, "SECTION"); pair(2, "HEADER")
+    pair(9, "$" + "INSUNITS"); pair(70, 6)
+    pair(0, "ENDSEC"); pair(0, "SECTION"); pair(2, "ENTITIES")
+    pipes.forEach { pipe ->
+        entity("LINE", pipe.layer.ifBlank { "SEWER" })
+        pair(10, pipe.a.x / PX_PER_METER); pair(20, -pipe.a.y / PX_PER_METER); pair(30, 0)
+        pair(11, pipe.b.x / PX_PER_METER); pair(21, -pipe.b.y / PX_PER_METER); pair(31, 0)
+    }
+    manholes.forEach { mh ->
+        val x = mh.point.x / PX_PER_METER
+        val y = -mh.point.y / PX_PER_METER
+        if (mh.isCircular) {
+            entity("CIRCLE", "MANHOLES")
+            pair(10, x); pair(20, y); pair(30, 0); pair(40, 0.7318 / 2.0)
+        } else {
+            val hx = 0.70 / 2.0; val hy = 1.10 / 2.0
+            entity("LWPOLYLINE", "MANHOLES")
+            pair(90, 4); pair(70, 1)
+            listOf(x-hx to y-hy, x+hx to y-hy, x+hx to y+hy, x-hx to y+hy).forEach { (vx, vy) ->
+                pair(10, vx); pair(20, vy)
+            }
+        }
+        entity("TEXT", "MANHOLE-LABELS")
+        pair(10, x); pair(20, y + 0.45); pair(30, 0); pair(40, 0.20); pair(1, mh.id)
+    }
+    pair(0, "ENDSEC"); pair(0, "EOF")
+    return out.toString()
 }
 
 
