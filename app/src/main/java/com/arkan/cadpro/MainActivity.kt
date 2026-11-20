@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -45,7 +46,7 @@ private const val PX_PER_METER = 40f
 private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Double): Pair<Double, Double> =
     (originEasting + point.x / PX_PER_METER) to (originNorthing - point.y / PX_PER_METER)
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
-private data class CadEntity(val type: String, val points: List<Offset>, val layer: String = "0")
+private data class CadEntity(val type: String, val points: List<Offset>, val layer: String = "0", val text: String = "")
 private fun segmentDistance(p: Offset, a: Offset, b: Offset): Float {
     val dx=b.x-a.x; val dy=b.y-a.y
     val len2=dx*dx+dy*dy
@@ -143,6 +144,7 @@ private fun ArkanApp() {
     var viewPanY by remember { mutableStateOf(0f) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadCornerDistance by remember { mutableStateOf("0.25") }
+    var cadTextValue by remember { mutableStateOf("Text") }
     var cadStretchVertex by remember { mutableStateOf<Int?>(null) }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
@@ -454,6 +456,10 @@ private fun ArkanApp() {
                     OutlinedTextField(cadCornerDistance,{cadCornerDistance=it},label={Text("FILLET R / CHAMFER م")},modifier=Modifier.weight(1f),singleLine=true)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { mode = "TEXT"; cadDraft = emptyList(); status = "اكتب النص ثم المس مكان وضعه على الرسم." }, modifier = Modifier.weight(1f)) { Text("TEXT") }
+                    OutlinedTextField(cadTextValue, { cadTextValue = it }, label = { Text("محتوى النص") }, modifier = Modifier.weight(2f), singleLine = true)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                     listOf("ARC", "RECTANGLE").forEach { tool ->
                         OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
                     }
@@ -493,6 +499,15 @@ private fun ArkanApp() {
                     }
                 }, onTap = { tap ->
                     when {
+                        mode == "TEXT" -> {
+                            val value = cadTextValue.trim()
+                            if (value.isEmpty()) status = "اكتب النص أولاً."
+                            else {
+                                cadEntities = cadEntities + CadEntity("TEXT", listOf(tap), "0", value)
+                                cadRedo = emptyList()
+                                status = "تم وضع النص على الرسم."
+                            }
+                        }
                         mode == "DELETE" -> {
                             val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
                             if (hit != null && cadEntityDistance(tap,cadEntities[hit]) <= 28f) {
@@ -793,6 +808,10 @@ private fun ArkanApp() {
                             val pts = arcPoints(entity.points)
                             pts.zipWithNext().forEach { (a,b) -> drawLine(Color.White, a, b, 2f) }
                         }
+                        "TEXT" -> if (entity.points.isNotEmpty()) {
+                            val paint = Paint().apply { color = android.graphics.Color.WHITE; textSize = 16f; isAntiAlias = true }
+                            drawContext.canvas.nativeCanvas.drawText(entity.text, entity.points[0].x, entity.points[0].y, paint)
+                        }
                     }
                 }
                 if (cadDraft.isNotEmpty()) {
@@ -1057,6 +1076,10 @@ private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, cadEntitie
                 val (x,y)=localToUtm(pts[0],originEasting,originNorthing)
                 val radius=hypot((pts[1].x-pts[0].x).toDouble(),(pts[1].y-pts[0].y).toDouble())/PX_PER_METER
                 entity("CIRCLE",cad.layer); pair(10,x); pair(20,y); pair(30,0); pair(40,radius)
+            }
+            "TEXT" -> if (cad.points.isNotEmpty()) {
+                val (x,y)=localToUtm(cad.points[0],originEasting,originNorthing)
+                entity("TEXT",cad.layer); pair(10,x); pair(20,y); pair(30,0); pair(40,0.40); pair(1,cad.text)
             }
             "POLYLINE","RECTANGLE","ARC" -> if (pts.size >= 2) {
                 entity("LWPOLYLINE",cad.layer); pair(90,pts.size); pair(70,if(cad.type=="RECTANGLE") 1 else 0)
