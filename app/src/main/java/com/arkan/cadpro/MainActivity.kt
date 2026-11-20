@@ -414,7 +414,7 @@ private fun ArkanApp() {
             }) {
                 for (x in 0..(size.width/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(x*PX_PER_METER,0f), Offset(x*PX_PER_METER,size.height),1f)
                 for (y in 0..(size.height/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(0f,y*PX_PER_METER), Offset(size.width,y*PX_PER_METER),1f)
-                if (importedKml != null && (importedPaths.isNotEmpty() || importedManholes.isNotEmpty())) {
+                if (importedPaths.isNotEmpty() || importedManholes.isNotEmpty()) {
                     val allCoords = importedPaths.flatMap { it.points } + importedManholes.map { it.easting to it.northing }
                     if (allCoords.isNotEmpty()) {
                         val minE = allCoords.minOf { it.first }
@@ -1026,7 +1026,11 @@ private object DxfKmlImporter {
         var pipeCount = 0
         val layerLengths = mutableMapOf<String, Double>()
         val importedPaths = mutableListOf<ImportedPath>()
-        val structurePositions = entities.filter { it.firstOrNull()?.value == "INSERT" && it.firstOrNull { p -> p.code == 8 }?.value == "C-SSWR-STRC" }.mapNotNull { e ->
+        val structurePositions = entities.filter { e ->
+            val block = e.firstOrNull { it.code == 2 }?.value.orEmpty()
+            val layer = e.firstOrNull { it.code == 8 }?.value.orEmpty()
+            e.firstOrNull()?.value == "INSERT" && (block + " " + layer).contains(Regex("(?i)(MH|MANHOLE|STRUCT|SSWR|SEWER|CHAMBER)"))
+        }.mapNotNull { e ->
             val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
             val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
             val alt = e.firstOrNull { it.code == 30 }?.value?.toDoubleOrNull() ?: 0.0
@@ -1034,7 +1038,7 @@ private object DxfKmlImporter {
         }
         val labels = entities.filter { e ->
             val type = e.firstOrNull()?.value
-            (type == "TEXT" || type == "MTEXT") && e.firstOrNull { it.code == 8 }?.value == "C-STRM-TEXT"
+            (type == "TEXT" || type == "MTEXT")
         }.mapNotNull { e ->
             val east = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
             val north = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull() ?: return@mapNotNull null
@@ -1069,15 +1073,23 @@ private object DxfKmlImporter {
         for (e in entities) {
             val type = e.firstOrNull()?.value ?: continue
             val layer = e.firstOrNull { it.code == 8 }?.value ?: ""
-            if (type == "LWPOLYLINE" && layer == "C-SSWR-CNTR") {
+            if (type == "LINE" || type == "LWPOLYLINE") {
                 val pts = mutableListOf<Pair<Double, Double>>()
-                var x: Double? = null
-                for (p in e.drop(1)) {
-                    if (p.code == 10) x = p.value.toDoubleOrNull()
-                    if (p.code == 20 && x != null) {
-                        val y = p.value.toDoubleOrNull()
-                        if (y != null) pts.add(x!! to y)
-                        x = null
+                if (type == "LINE") {
+                    val x1 = e.firstOrNull { it.code == 10 }?.value?.toDoubleOrNull()
+                    val y1 = e.firstOrNull { it.code == 20 }?.value?.toDoubleOrNull()
+                    val x2 = e.firstOrNull { it.code == 11 }?.value?.toDoubleOrNull()
+                    val y2 = e.firstOrNull { it.code == 21 }?.value?.toDoubleOrNull()
+                    if (x1 != null && y1 != null && x2 != null && y2 != null) { pts.add(x1 to y1); pts.add(x2 to y2) }
+                } else {
+                    var x: Double? = null
+                    for (p in e.drop(1)) {
+                        if (p.code == 10) x = p.value.toDoubleOrNull()
+                        if (p.code == 20 && x != null) {
+                            val y = p.value.toDoubleOrNull()
+                            if (y != null) pts.add(x!! to y)
+                            x = null
+                        }
                     }
                 }
                 if (pts.size >= 2) {
@@ -1093,7 +1105,7 @@ private object DxfKmlImporter {
                 }
             }
         }
-        require(pipeCount > 0 || mhCount > 0) { "لم يتم العثور على خطوط أو مناهيل في الطبقات المحددة" }
+        require(pipeCount > 0 || mhCount > 0) { "تمت قراءة DXF لكن لم يتم العثور على LINE أو LWPOLYLINE أو INSERT للمناهيل." }
         val kml = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>ARKAN Sewer Network</name>$placemarks</Document></kml>"""
         val geometricCenterlineLength = layerLengths.values.sum()
