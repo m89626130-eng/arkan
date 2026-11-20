@@ -6,10 +6,22 @@ import java.io.File
 
 internal object LibreDwgRunner {
     private fun converter(context: Context, name: String): File {
-        val file = File(context.applicationInfo.nativeLibraryDir, name)
-        check(file.isFile) { "أدوات DWG غير موجودة في هذه النسخة من التطبيق." }
-        file.setExecutable(true, true)
-        return file
+        require(name == "dwg2dxf" || name == "dxf2dwg") { "اسم محول DWG غير صالح." }
+        val directory = File(context.noBackupFilesDir, "dwg/arm64-v8a")
+        check(directory.exists() || directory.mkdirs()) { "تعذر تجهيز مجلد أدوات DWG." }
+        val destination = File(directory, name)
+        if (!destination.isFile || destination.length() == 0L) {
+            context.assets.open("dwg/arm64-v8a/$name").use { source ->
+                destination.outputStream().use { target -> source.copyTo(target) }
+            }
+        }
+        check(destination.isFile && destination.length() > 0L) {
+            "أداة DWG $name غير موجودة داخل التطبيق."
+        }
+        check(destination.setExecutable(true, true) || destination.canExecute()) {
+            "تعذر تفعيل أداة DWG $name."
+        }
+        return destination
     }
 
     private fun run(executable: File, input: File, output: File) {
@@ -29,7 +41,7 @@ internal object LibreDwgRunner {
             input.outputStream().use { target -> source.copyTo(target) }
         } ?: error("تعذر قراءة ملف DWG")
         val output = File(context.cacheDir, "converted-$stamp.dxf")
-        run(converter(context, "libdwg2dxf.so"), input, output)
+        run(converter(context, "dwg2dxf"), input, output)
         return output
     }
 
@@ -38,7 +50,7 @@ internal object LibreDwgRunner {
         val input = File(context.cacheDir, "export-$stamp.dxf")
         input.writeText(dxfText, Charsets.UTF_8)
         val output = File(context.cacheDir, "export-$stamp.dwg")
-        run(converter(context, "libdxf2dwg.so"), input, output)
+        run(converter(context, "dxf2dwg"), input, output)
         return output
     }
 }
