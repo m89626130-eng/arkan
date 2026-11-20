@@ -150,6 +150,7 @@ private fun ArkanApp() {
     var showEditTools by remember { mutableStateOf(true) }
     var showLayerTools by remember { mutableStateOf(true) }
     var showMeasureTools by remember { mutableStateOf(true) }
+    var showDiameterTools by remember { mutableStateOf(true) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
     var viewZoom by remember { mutableStateOf(1f) }
@@ -546,6 +547,30 @@ private fun ArkanApp() {
                 Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("اختيار LSP") }
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { showDiameterTools = !showDiameterTools }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (showDiameterTools) "DIAMETER  ▾  أبعاد CAD" else "DIAMETER  ▸  أبعاد CAD")
+                }
+                if (showDiameterTools) {
+                    Text("أدوات الأبعاد الهندسية", color = Color(0xFF00C8A0), fontSize = 13.sp)
+                    listOf("ALIGNED", "LINEAR", "ANGULAR", "RADIUS", "DIAMETER", "ARC LENGTH").chunked(3).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            row.forEach { tool ->
+                                OutlinedButton(onClick = {
+                                    mode = "DIM_" + tool.replace(" ", "_")
+                                    cadDraft = emptyList()
+                                    status = when(tool) {
+                                        "ANGULAR" -> "حدد رأس الزاوية ثم نقطة على الضلع الأول ثم نقطة على الضلع الثاني."
+                                        "RADIUS" -> "المس الدائرة لإظهار نصف قطرها."
+                                        "DIAMETER" -> "المس الدائرة لإظهار قطرها."
+                                        "ARC LENGTH" -> "المس القوس لإظهار طول القوس."
+                                        else -> "حدد نقطتي قياس $tool."
+                                    }
+                                }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                            }
+                            repeat(3-row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
+                }
                 OutlinedButton(onClick = { showMeasureTools = !showMeasureTools }, modifier = Modifier.fillMaxWidth()) {
                     Text(if (showMeasureTools) "MEASURE  ▾  أدوات القياس" else "MEASURE  ▸  أدوات القياس")
                 }
@@ -626,13 +651,33 @@ private fun ArkanApp() {
                                 else "ID POINT | X = %.3f م | Y = %.3f م (إحداثيات محلية للرسم)".format(Locale.US, x, y)
                             mode = "PIPE"
                         }
-                        mode == "DIMENSION" -> {
+                        mode == "DIMENSION" || mode == "DIM_ALIGNED" || mode == "DIM_LINEAR" -> {
                             if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد نقطة نهاية البعد." }
                             else {
                                 val first = cadDraft.first()
                                 if (hypot((tap.x-first.x).toDouble(),(tap.y-first.y).toDouble()) < 1f) status = "المس نقطة مختلفة لإنشاء البعد."
-                                else { cadEntities = cadEntities + CadEntity("DIMENSION", listOf(first,tap), currentCadLayer); cadRedo = emptyList(); status = "تم إنشاء DIMENSION على الرسم."; cadDraft = emptyList(); mode = "PIPE" }
+                                else {
+                                    val kind = when(mode) { "DIM_LINEAR" -> "DIM_LINEAR"; "DIM_ALIGNED" -> "DIM_ALIGNED"; else -> "DIMENSION" }
+                                    cadEntities = cadEntities + CadEntity(kind, listOf(first,tap), currentCadLayer)
+                                    cadRedo = emptyList(); status = "تم إنشاء البعد على الرسم."; cadDraft = emptyList(); mode = "PIPE"
+                                }
                             }
+                        }
+                        mode == "DIM_ANGULAR" -> {
+                            cadDraft = cadDraft + tap
+                            if (cadDraft.size == 1) status = "حدد نقطة على الضلع الأول."
+                            else if (cadDraft.size == 2) status = "حدد نقطة على الضلع الثاني."
+                            else { cadEntities = cadEntities + CadEntity("DIM_ANGULAR", cadDraft.take(3), currentCadLayer); cadRedo = emptyList(); status = "تم إنشاء قياس الزاوية."; cadDraft = emptyList(); mode = "PIPE" }
+                        }
+                        mode == "DIM_RADIUS" || mode == "DIM_DIAMETER" -> {
+                            val hit = cadEntities.indices.filter { cadEntities[it].type == "CIRCLE" }.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
+                            if (hit == null || cadEntityDistance(tap,cadEntities[hit]) > 36f) status = "لم يتم تحديد دائرة قريبة."
+                            else { val circle = cadEntities[hit]; cadEntities = cadEntities + CadEntity(if(mode=="DIM_RADIUS") "DIM_RADIUS" else "DIM_DIAMETER", circle.points, currentCadLayer); cadRedo = emptyList(); status = "تم وضع قياس الدائرة."; mode = "PIPE" }
+                        }
+                        mode == "DIM_ARC_LENGTH" -> {
+                            val hit = cadEntities.indices.filter { cadEntities[it].type == "ARC" }.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
+                            if (hit == null || cadEntityDistance(tap,cadEntities[hit]) > 36f) status = "لم يتم تحديد قوس قريب."
+                            else { cadEntities = cadEntities + CadEntity("DIM_ARCLENGTH", cadEntities[hit].points, currentCadLayer); cadRedo = emptyList(); status = "تم وضع قياس طول القوس."; mode = "PIPE" }
                         }
                         mode == "COLOR" -> {
                             val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
@@ -951,7 +996,7 @@ private fun ArkanApp() {
                             val pts = arcPoints(entity.points)
                             pts.zipWithNext().forEach { (a,b) -> drawLine(Color.White, a, b, 2f) }
                         }
-                        "DIMENSION" -> if (entity.points.size >= 2) {
+                        "DIMENSION", "DIM_ALIGNED", "DIM_LINEAR" -> if (entity.points.size >= 2) {
                             val a = entity.points[0]; val b = entity.points[1]
                             val dx = b.x-a.x; val dy = b.y-a.y
                             val length = hypot(dx.toDouble(),dy.toDouble()).toFloat().coerceAtLeast(1f)
@@ -967,6 +1012,32 @@ private fun ArkanApp() {
                             val label = "%.2f m".format(Locale.US,length/PX_PER_METER)
                             val paint = Paint().apply { color = entityColor.toArgb(); textSize = 15f; isAntiAlias = true; textAlign = Paint.Align.CENTER }
                             drawContext.canvas.nativeCanvas.drawText(label,(da.x+db.x)/2f,(da.y+db.y)/2f-5f,paint)
+                        }
+                        "DIM_RADIUS", "DIM_DIAMETER" -> if (entity.points.size >= 2) {
+                            val center = entity.points[0]; val edge = entity.points[1]
+                            val radius = hypot((edge.x-center.x).toDouble(),(edge.y-center.y).toDouble()).toFloat()
+                            val end = if(entity.type=="DIM_DIAMETER") Offset(center.x+(edge.x-center.x)*2f,center.y+(edge.y-center.y)*2f) else edge
+                            drawLine(entityColor,center,end,2f)
+                            val value = if(entity.type=="DIM_DIAMETER") radius*2f else radius
+                            val label = (if(entity.type=="DIM_DIAMETER") "Ø " else "R ") + "%.2f m".format(Locale.US,value/PX_PER_METER)
+                            val paint = Paint().apply { color=entityColor.toArgb(); textSize=15f; isAntiAlias=true }
+                            drawContext.canvas.nativeCanvas.drawText(label,(center.x+end.x)/2f+5f,(center.y+end.y)/2f-5f,paint)
+                        }
+                        "DIM_ARCLENGTH" -> {
+                            val pts=arcPoints(entity.points,96)
+                            pts.zipWithNext().forEach { (a,b) -> drawLine(entityColor,a,b,2f) }
+                            val len=pts.zipWithNext().sumOf { (a,b)->hypot((b.x-a.x).toDouble(),(b.y-a.y).toDouble()) }/PX_PER_METER
+                            val mid=pts.getOrNull(pts.size/2)
+                            if(mid!=null) { val paint=Paint().apply { color=entityColor.toArgb(); textSize=15f; isAntiAlias=true }; drawContext.canvas.nativeCanvas.drawText("Arc %.2f m".format(Locale.US,len),mid.x,mid.y-8f,paint) }
+                        }
+                        "DIM_ANGULAR" -> if(entity.points.size>=3) {
+                            val v=entity.points[0]; val a=entity.points[1]; val b=entity.points[2]
+                            val ax=a.x-v.x; val ay=a.y-v.y; val bx=b.x-v.x; val by=b.y-v.y
+                            val denom=hypot(ax.toDouble(),ay.toDouble())*hypot(bx.toDouble(),by.toDouble())
+                            val angle=if(denom>0.0) Math.acos(((ax*bx+ay*by)/denom).coerceIn(-1.0,1.0))*180.0/Math.PI else 0.0
+                            drawLine(entityColor,v,a,2f); drawLine(entityColor,v,b,2f)
+                            val paint=Paint().apply { color=entityColor.toArgb(); textSize=15f; isAntiAlias=true }
+                            drawContext.canvas.nativeCanvas.drawText("%.1f°".format(Locale.US,angle),(v.x+a.x+b.x)/3f,(v.y+a.y+b.y)/3f,paint)
                         }
                         "TEXT" -> if (entity.points.isNotEmpty()) {
                             val paint = Paint().apply { color = entityColor.toArgb(); textSize = 16f; isAntiAlias = true }
