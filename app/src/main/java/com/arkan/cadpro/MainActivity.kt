@@ -141,16 +141,26 @@ class MainActivity : ComponentActivity() {
 private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, selected: Boolean = false) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.width(72.dp).height(70.dp),
-        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 3.dp),
+        modifier = Modifier.width(66.dp).height(60.dp),
+        shape = RoundedCornerShape(5.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (selected) Color(0xFF16434A) else Color(0xFF202A31),
+            containerColor = if (selected) Color(0xFF174B58) else Color(0xFF252B31),
             contentColor = Color.White
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (selected) Color(0xFF39C6D8) else Color(0xFF3A444C)
         )
     ) {
-        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text(icon, color = Color(0xFF53D8E5), fontSize = 21.sp, lineHeight = 23.sp)
-            Text(label, color = Color.White, fontSize = 9.sp, maxLines = 1)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(icon, color = if (selected) Color.White else Color(0xFF59D7E5), fontSize = 23.sp, lineHeight = 25.sp)
+            Spacer(Modifier.height(1.dp))
+            Text(label, color = Color(0xFFE4E9EC), fontSize = 8.sp, maxLines = 1, softWrap = false)
         }
     }
 }
@@ -494,7 +504,7 @@ private fun ArkanApp() {
                 CadPaletteButton("−", "ZOOM", { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f) })
             }
             Spacer(Modifier.height(6.dp))
-            Box(Modifier.fillMaxWidth().height(360.dp)) {
+            Box(Modifier.fillMaxWidth().height(400.dp)) {
             Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color.Black).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
