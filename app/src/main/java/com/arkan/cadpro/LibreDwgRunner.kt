@@ -24,8 +24,10 @@ internal object LibreDwgRunner {
     }
 
     private fun run(executable: File, input: File, output: File) {
-        val process = // Put options before positional filenames: Android/Bionic getopt may stop parsing\n        // at the first non-option, which otherwise silently ignores -o and -y.\n        ProcessBuilder(executable.absolutePath, "-o", output.absolutePath, "-y", input.absolutePath)
-            .redirectErrorStream(true).start()
+        // Put options before positional filenames so the converter parses them on Android.
+        val process = ProcessBuilder(
+            executable.absolutePath, "-o", output.absolutePath, "-y", input.absolutePath
+        ).redirectErrorStream(true).start()
         val log = process.inputStream.bufferedReader().use { it.readText() }
         val exit = process.waitFor()
         check(exit == 0 && output.isFile && output.length() > 0L) {
