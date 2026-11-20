@@ -66,7 +66,7 @@ jobs:
       - name: Verify DWG tools are packaged in APK
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
-          unzip -l "$APK" | grep -E 'lib/arm64-v8a/lib(dwg2dxf|dxf2dwg)\\.so$'
+          unzip -l "$APK" | grep -E 'lib/arm64-v8a/lib(dwg2dxf|dxf2dwg)\.so$'
           mkdir -p "$RUNNER_TEMP/dwg-verify"
           unzip -p "$APK" lib/arm64-v8a/libdwg2dxf.so > "$RUNNER_TEMP/dwg-verify/dwg2dxf"
           unzip -p "$APK" lib/arm64-v8a/libdxf2dwg.so > "$RUNNER_TEMP/dwg-verify/dxf2dwg"
