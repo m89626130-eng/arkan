@@ -545,17 +545,17 @@ private fun ArkanApp() {
                     if (showEditTools) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             listOf("MOVE", "COPY", "ROTATE").forEach { tool ->
-                                OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                                OutlinedButton(onClick = { if (mode == "POLYLINE" && cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList() }; mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             listOf("TRIM", "EXTEND", "STRETCH").forEach { tool ->
-                                OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; "STRETCH" -> "حدد العنصر ثم اختر الرأس المراد سحبه ثم موضعه الجديد."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                                OutlinedButton(onClick = { if (mode == "POLYLINE" && cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList() }; mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; "STRETCH" -> "حدد العنصر ثم اختر الرأس المراد سحبه ثم موضعه الجديد."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             listOf("FILLET", "CHAMFER").forEach { tool ->
-                                OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                                OutlinedButton(onClick = { if (mode == "POLYLINE" && cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList() }; mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
