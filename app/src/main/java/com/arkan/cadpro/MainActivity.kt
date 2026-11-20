@@ -165,6 +165,8 @@ private fun ArkanApp() {
     var cadStretchVertex by remember { mutableStateOf<Int?>(null) }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
     var measureDraft by remember { mutableStateOf(listOf<Offset>()) }
+    var measureLastResult by remember { mutableStateOf("") }
+    var measureShowOnDrawing by remember { mutableStateOf(true) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
     var mode by remember { mutableStateOf("PIPE") }
     var pipeStart by remember { mutableStateOf<Offset?>(null) }
@@ -676,6 +678,20 @@ private fun ArkanApp() {
                             OutlinedButton(onClick = { mode = if (tool == "ARC LENGTH") "MEASURE_ARC_LENGTH" else "MEASURE_ID_POINT"; measureDraft = emptyList(); status = if (tool == "ARC LENGTH") "المس قوس ARC لمعرفة طوله." else "المس نقطة لعرض إحداثياتها." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
                         }
                     }
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("إظهار القياس على الرسم", color = Color.White, fontSize = 12.sp)
+                        Switch(checked = measureShowOnDrawing, onCheckedChange = { measureShowOnDrawing = it })
+                        Spacer(Modifier.weight(1f))
+                        OutlinedButton(onClick = { measureDraft = emptyList(); mode = "PIPE"; status = "تم إلغاء القياس." }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("إلغاء") }
+                    }
+                    if (measureLastResult.isNotBlank()) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF17232B)), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text("MEASUREMENT RESULT", color = Color(0xFF00C8A0), fontSize = 11.sp)
+                                Text(measureLastResult, color = Color.White, fontSize = 13.sp)
+                            }
+                        }
+                    }
                     if (mode == "MEASURE_AREA") {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(onClick = {
@@ -686,7 +702,8 @@ private fun ArkanApp() {
                                     }
                                     val area = kotlin.math.abs(twiceArea) / 2.0 / (PX_PER_METER * PX_PER_METER)
                                     val perimeter = measureDraft.zipWithNext().sumOf { (a,b) -> hypot((b.x-a.x).toDouble(),(b.y-a.y).toDouble()) / PX_PER_METER } + hypot((measureDraft.first().x-measureDraft.last().x).toDouble(),(measureDraft.first().y-measureDraft.last().y).toDouble()) / PX_PER_METER
-                                    status = "المساحة = %.3f م² | المحيط = %.3f م".format(Locale.US, area, perimeter)
+                                    measureLastResult = "Area: %.3f m²   |   Perimeter: %.3f m".format(Locale.US, area, perimeter)
+                                    status = measureLastResult
                                 } else status = "يلزم تحديد ثلاث نقاط على الأقل لحساب المساحة."
                                 measureDraft = emptyList(); mode = "PIPE"
                             }, modifier = Modifier.weight(1f)) { Text("إنهاء حساب AREA") }
@@ -717,7 +734,16 @@ private fun ArkanApp() {
                             else {
                                 val first = measureDraft.first()
                                 val length = hypot((tap.x-first.x).toDouble(), (tap.y-first.y).toDouble()) / PX_PER_METER
-                                status = "DISTANCE = %.3f م".format(Locale.US, length)
+                                val dx = (tap.x-first.x) / PX_PER_METER
+                                val dy = -(tap.y-first.y) / PX_PER_METER
+                                val angle = Math.toDegrees(atan2((tap.y-first.y).toDouble(), (tap.x-first.x).toDouble()))
+                                val result = "Length: %.3f m   |   Angle: %.2f°   |   ΔX: %.3f m   |   ΔY: %.3f m".format(Locale.US, length, angle, dx, dy)
+                                measureLastResult = result
+                                if (measureShowOnDrawing) {
+                                    cadEntities = cadEntities + CadEntity("MEASURE_DIMENSION", listOf(first,tap), currentCadLayer, color = 0xFF00C8A0)
+                                    cadRedo = emptyList()
+                                }
+                                status = result
                                 measureDraft = emptyList(); mode = "PIPE"
                             }
                         }
@@ -731,14 +757,16 @@ private fun ArkanApp() {
                             else {
                                 val pts = arcPoints(cadEntities[hit].points, 96)
                                 val length = pts.zipWithNext().sumOf { (a,b) -> hypot((b.x-a.x).toDouble(),(b.y-a.y).toDouble()) } / PX_PER_METER
-                                status = "ARC LENGTH = %.3f م".format(Locale.US, length); mode = "PIPE"
+                                measureLastResult = "Arc Length: %.3f m".format(Locale.US, length)
+                                status = measureLastResult; mode = "PIPE"
                             }
                         }
                         mode == "MEASURE_ID_POINT" -> {
                             val x = tap.x / PX_PER_METER; val y = -tap.y / PX_PER_METER
                             val e0 = referenceEasting.toDoubleOrNull(); val n0 = referenceNorthing.toDoubleOrNull()
-                            status = if (e0 != null && n0 != null) "ID POINT | X = %.3f م | Y = %.3f م | E = %.3f | N = %.3f".format(Locale.US, x, y, e0 + x, n0 + y)
-                                else "ID POINT | X = %.3f م | Y = %.3f م (إحداثيات محلية للرسم)".format(Locale.US, x, y)
+                            measureLastResult = if (e0 != null && n0 != null) "X: %.3f m   |   Y: %.3f m   |   E: %.3f   |   N: %.3f".format(Locale.US, x, y, e0 + x, n0 + y)
+                                else "X: %.3f m   |   Y: %.3f m (local drawing coordinates)".format(Locale.US, x, y)
+                            status = "ID POINT | " + measureLastResult
                             mode = "PIPE"
                         }
                         mode == "DIMENSION" || mode == "DIM_ALIGNED" || mode == "DIM_LINEAR" -> {
@@ -1135,6 +1163,23 @@ private fun ArkanApp() {
                         "ARC" -> {
                             val pts = arcPoints(entity.points)
                             pts.zipWithNext().forEach { (a,b) -> drawLine(entityColor, a, b, 2f) }
+                        }
+                        "MEASURE_DIMENSION" -> if (entity.points.size >= 2) {
+                            val a = entity.points[0]; val b = entity.points[1]
+                            val dx = b.x-a.x; val dy = b.y-a.y
+                            val length = hypot(dx.toDouble(),dy.toDouble()).toFloat().coerceAtLeast(1f)
+                            val nx = -dy/length; val ny = dx/length
+                            val off = 24f
+                            val da = Offset(a.x+nx*off,a.y+ny*off); val db = Offset(b.x+nx*off,b.y+ny*off)
+                            drawLine(entityColor,a,da,1.5f); drawLine(entityColor,b,db,1.5f); drawLine(entityColor,da,db,2f)
+                            val arrow = 8f
+                            drawLine(entityColor,da,Offset(da.x+(dx/length*arrow)+(nx*arrow*0.55f),da.y+(dy/length*arrow)+(ny*arrow*0.55f)),2f)
+                            drawLine(entityColor,da,Offset(da.x+(dx/length*arrow)-(nx*arrow*0.55f),da.y+(dy/length*arrow)-(ny*arrow*0.55f)),2f)
+                            drawLine(entityColor,db,Offset(db.x-(dx/length*arrow)+(nx*arrow*0.55f),db.y-(dy/length*arrow)+(ny*arrow*0.55f)),2f)
+                            drawLine(entityColor,db,Offset(db.x-(dx/length*arrow)-(nx*arrow*0.55f),db.y-(dy/length*arrow)-(ny*arrow*0.55f)),2f)
+                            val label = "%.3f m".format(Locale.US,length/PX_PER_METER)
+                            val paint = Paint().apply { color = entityColor.toArgb(); textSize = 16f; isAntiAlias = true; textAlign = Paint.Align.CENTER; style = Paint.Style.FILL }
+                            drawContext.canvas.nativeCanvas.drawText(label,(da.x+db.x)/2f,(da.y+db.y)/2f-7f,paint)
                         }
                         "DIMENSION", "DIM_ALIGNED", "DIM_LINEAR" -> if (entity.points.size >= 2) {
                             val a = entity.points[0]; val b = entity.points[1]
