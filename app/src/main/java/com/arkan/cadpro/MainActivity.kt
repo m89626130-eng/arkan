@@ -76,6 +76,7 @@ private fun ArkanApp() {
     var mode by remember { mutableStateOf("PIPE") }
     var pipeStart by remember { mutableStateOf<Offset?>(null) }
     var pipeLayer by remember { mutableStateOf("PIPE-250") }
+    var targetSlopePercent by remember { mutableStateOf("0.50") }
     var showPipeDiameterMenu by remember { mutableStateOf(false) }
     var trenchWidth by remember { mutableStateOf("0.60") }
     var trenchDepth by remember { mutableStateOf("2.00") }
@@ -288,13 +289,15 @@ private fun ArkanApp() {
                 }
                 Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("اختيار LSP") }
             }
+            OutlinedTextField(targetSlopePercent, { targetSlopePercent = it }, label = { Text("نسبة الميل المطلوبة (%)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Text("عند رسم الأنبوب من منهول له INV إلى منهول بلا INV، يحسب البرنامج INV للمنهول الثاني تلقائياً حسب طول الأنبوب.", color = Color.LightGray, fontSize = 10.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(trenchWidth, { trenchWidth = it }, label = { Text("عرض الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
                 OutlinedTextField(trenchDepth, { trenchDepth = it }, label = { Text("عمق الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
             }
             Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
-            Canvas(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer) {
+            Canvas(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent) {
                 detectTapGestures { tap ->
                     when {
                         pendingManhole != null -> {
@@ -305,8 +308,26 @@ private fun ArkanApp() {
                             val first = pipeStart
                             if (first == null) { pipeStart = tap; status = "تم تحديد بداية الأنبوب؛ اختر نقطة النهاية." }
                             else {
-                                pipes = pipes + Pipe(first, tap, pipeLayer.ifBlank { "SEWER" }); pipeStart = null
-                                status = "طول المقطع: %.2f م".format(Locale.US, hypot((tap.x-first.x).toDouble(), (tap.y-first.y).toDouble()) / PX_PER_METER)
+                                val newPipe = Pipe(first, tap, pipeLayer.ifBlank { "SEWER" })
+                                pipes = pipes + newPipe
+                                pipeStart = null
+                                val lengthM = hypot((tap.x-first.x).toDouble(), (tap.y-first.y).toDouble()) / PX_PER_METER
+                                val startMh = nearestManhole(first, manholes)
+                                val endMh = nearestManhole(tap, manholes)
+                                val slope = targetSlopePercent.toDoubleOrNull()
+                                if (startMh != null && endMh != null && startMh.id != endMh.id &&
+                                    startMh.invertLevel != null && endMh.invertLevel == null && slope != null && slope > 0.0 && lengthM > 0.0) {
+                                    val calculatedInv = startMh.invertLevel!! - lengthM * slope / 100.0
+                                    manholes = manholes.map { mh ->
+                                        if (mh.id == endMh.id) {
+                                            val calculatedDepth = mh.groundLevel?.let { it - calculatedInv } ?: mh.depth
+                                            mh.copy(invertLevel = calculatedInv, depth = calculatedDepth)
+                                        } else mh
+                                    }
+                                    status = "طول الأنبوب: %.2f م | الميل: %.2f%% | تم حساب INV للمنهول %s = %.3f".format(Locale.US, lengthM, slope, endMh.id, calculatedInv)
+                                } else {
+                                    status = "طول المقطع: %.2f م".format(Locale.US, lengthM)
+                                }
                             }
                         }
                     }
