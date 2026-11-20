@@ -497,8 +497,7 @@ private fun ArkanApp() {
             Box(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp))) {
             Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
-                    if (mode == "POLYLINE" && cadDraft.size >= 2) {
-                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
+                    if (mode == "POLYLINE" && cadDraft.size >= 2) {                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
                         cadRedo = emptyList()
                         cadDraft = emptyList()
                         status = "تم إنهاء POLYLINE."
@@ -897,8 +896,7 @@ private fun ArkanApp() {
                     }
                 })
             }) {
-                for (x in 0..(size.width/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(x*PX_PER_METER,0f), Offset(x*PX_PER_METER,size.height),1f)
-                for (y in 0..(size.height/PX_PER_METER).toInt()) drawLine(Color(0xFF263139), Offset(0f,y*PX_PER_METER), Offset(size.width,y*PX_PER_METER),1f)
+                // Plain black CAD workspace: grid removed; drawing is allowed anywhere on the canvas.
                 if (importedPaths.isNotEmpty() || importedManholes.isNotEmpty()) {
                     val allCoords = importedPaths.flatMap { it.points } + importedManholes.map { it.easting to it.northing }
                     if (allCoords.isNotEmpty()) {
@@ -997,8 +995,7 @@ private fun ArkanApp() {
                             val denom=hypot(ax.toDouble(),ay.toDouble())*hypot(bx.toDouble(),by.toDouble())
                             val angle=if(denom>0.0) Math.acos(((ax*bx+ay*by)/denom).coerceIn(-1.0,1.0))*180.0/Math.PI else 0.0
                             drawLine(entityColor,v,a,2f); drawLine(entityColor,v,b,2f)
-                            val paint=Paint().apply { color=entityColor.toArgb(); textSize=15f; isAntiAlias=true }
-                            drawContext.canvas.nativeCanvas.drawText("%.1f°".format(Locale.US,angle),(v.x+a.x+b.x)/3f,(v.y+a.y+b.y)/3f,paint)
+                            val paint=Paint().apply { color=entityColor.toArgb(); textSize=15f; isAntiAlias=true }                            drawContext.canvas.nativeCanvas.drawText("%.1f°".format(Locale.US,angle),(v.x+a.x+b.x)/3f,(v.y+a.y+b.y)/3f,paint)
                         }
                         "TEXT" -> if (entity.points.isNotEmpty()) {
                             val paint = Paint().apply { color = entityColor.toArgb(); textSize = 16f; isAntiAlias = true }
@@ -1497,8 +1494,7 @@ private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, cadEntitie
         }
         entity("TEXT", "MANHOLE-LABELS")
         pair(10, x); pair(20, y + 0.45); pair(30, 0); pair(40, 0.20); pair(1, mh.id)
-    }
-    pair(0, "ENDSEC"); pair(0, "EOF")
+    }    pair(0, "ENDSEC"); pair(0, "EOF")
     return out.toString()
 }
 
@@ -1997,8 +1993,7 @@ private object DxfKmlImporter {
             // Only associate nearby annotation labels; never reuse a distant label for every manhole.
             val nearestStructure = labels.filter { it.text.contains("STRUCTURE", true) }
                 .map { it to hypot(it.east - pos.east, it.north - pos.north) }
-                .filter { it.second <= 8.0 }.minByOrNull { it.second }?.first
-            val nearestDepth = labels.filter { Regex("""(?i)h\s*:\s*[-+]?\d+(?:\.\d+)?""").containsMatchIn(it.text) }
+                .filter { it.second <= 8.0 }.minByOrNull { it.second }?.first            val nearestDepth = labels.filter { Regex("""(?i)h\s*:\s*[-+]?\d+(?:\.\d+)?""").containsMatchIn(it.text) }
                 .map { it to hypot(it.east - pos.east, it.north - pos.north) }
                 .filter { it.second <= 8.0 }.minByOrNull { it.second }?.first
             val extractedId = nearestStructure?.text?.let { Regex("""\(([^)]+)\)""").find(it)?.groupValues?.getOrNull(1) }
