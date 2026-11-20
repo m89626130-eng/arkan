@@ -142,6 +142,7 @@ private fun ArkanApp() {
     var viewPanX by remember { mutableStateOf(0f) }
     var viewPanY by remember { mutableStateOf(0f) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
+    var cadCornerDistance by remember { mutableStateOf("0.25") }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
     var mode by remember { mutableStateOf("PIPE") }
@@ -443,7 +444,13 @@ private fun ArkanApp() {
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("FILLET", "CHAMFER").forEach { tool ->
+                        OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(cadOffsetDistance,{cadOffsetDistance=it},label={Text("مسافة OFFSET م")},modifier=Modifier.weight(1f),singleLine=true)
+                    OutlinedTextField(cadCornerDistance,{cadCornerDistance=it},label={Text("FILLET R / CHAMFER م")},modifier=Modifier.weight(1f),singleLine=true)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                     listOf("ARC", "RECTANGLE").forEach { tool ->
@@ -494,7 +501,7 @@ private fun ArkanApp() {
                                 status = "تم حذف العنصر."
                             } else status = "لم يتم تحديد عنصر قريب."
                         }
-                        mode in listOf("MOVE","COPY","OFFSET","TRIM","EXTEND") -> {
+                        mode in listOf("MOVE","COPY","OFFSET","TRIM","EXTEND","FILLET","CHAMFER") -> {
                             val selected = cadEditSelection
                             val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
                                 ?.takeIf { cadEntityDistance(tap,cadEntities[it]) <= 28f }
@@ -505,6 +512,7 @@ private fun ArkanApp() {
                                     status = when(mode) {
                                         "TRIM" -> "تم تحديد حد القطع. المس العنصر المراد تشذيبه."
                                         "EXTEND" -> "تم تحديد خط الحد. المس العنصر المراد تمديده."
+                                        "FILLET", "CHAMFER" -> "تم تحديد الخط الأول. اختر الخط الثاني."
                                         else -> "تم تحديد ${cadEntities[hit].type}. حدد نقطة/جهة التنفيذ."
                                     }
                                 }
@@ -545,6 +553,81 @@ private fun ArkanApp() {
                                                     val newPoints=if(firstDist<secondDist) listOf(intersection,d) else listOf(c,intersection)
                                                     cadEntities=cadEntities.toMutableList().also { it[hit]=target.copy(points=newPoints) }
                                                     cadRedo=emptyList(); status="تم EXTEND إلى خط الحد."
+                                                }
+                                            }
+                                        }
+                                    }
+                                    cadEditSelection=null
+                                }
+                            } else if (mode in listOf("FILLET","CHAMFER")) {
+                                if (hit == null || hit == selected) status = "حدد خطاً ثانياً مختلفاً."
+                                else {
+                                    val first = cadEntities.getOrNull(selected)
+                                    val second = cadEntities.getOrNull(hit)
+                                    val distanceMeters = cadCornerDistance.toFloatOrNull()
+                                    if (first == null || second == null) status = "تعذر العثور على الخط المحدد."
+                                    else if (first.type != "LINE" || second.type != "LINE" || first.points.size < 2 || second.points.size < 2) {
+                                        status = "$mode يدعم حالياً عنصرين من نوع LINE فقط."
+                                    } else if (distanceMeters == null || distanceMeters <= 0f) {
+                                        status = "أدخل قيمة موجبة لـ FILLET radius أو CHAMFER distance."
+                                    } else {
+                                        val a=first.points[0]; val b=first.points[1]
+                                        val c=second.points[0]; val d=second.points[1]
+                                        val rx=b.x-a.x; val ry=b.y-a.y
+                                        val sx=d.x-c.x; val sy=d.y-c.y
+                                        val den=rx*sy-ry*sx
+                                        if(kotlin.math.abs(den)<1e-5f) status = "الخطّان متوازيان؛ لا يمكن تنفيذ $mode."
+                                        else {
+                                            val qx=c.x-a.x; val qy=c.y-a.y
+                                            val t=(qx*sy-qy*sx)/den
+                                            val u=(qx*ry-qy*rx)/den
+                                            if(t !in 0f..1f || u !in 0f..1f) status = "يجب أن يتقاطع الخطان ضمن امتدادهما المرسوم."
+                                            else {
+                                                val corner=Offset(a.x+t*rx,a.y+t*ry)
+                                                val firstStartNear=hypot((corner.x-a.x).toDouble(),(corner.y-a.y).toDouble()) <= hypot((corner.x-b.x).toDouble(),(corner.y-b.y).toDouble())
+                                                val secondStartNear=hypot((corner.x-c.x).toDouble(),(corner.y-c.y).toDouble()) <= hypot((corner.x-d.x).toDouble(),(corner.y-d.y).toDouble())
+                                                val pFar=if(firstStartNear) b else a
+                                                val qFar=if(secondStartNear) d else c
+                                                val v1x=pFar.x-corner.x; val v1y=pFar.y-corner.y
+                                                val v2x=qFar.x-corner.x; val v2y=qFar.y-corner.y
+                                                val len1=hypot(v1x.toDouble(),v1y.toDouble()).toFloat()
+                                                val len2=hypot(v2x.toDouble(),v2y.toDouble()).toFloat()
+                                                val dot=((v1x*v2x+v1y*v2y)/(len1*len2).coerceAtLeast(1e-6f)).coerceIn(-1f,1f)
+                                                val theta=kotlin.math.acos(dot)
+                                                val half=theta/2f
+                                                val requested=distanceMeters*PX_PER_METER
+                                                val trimDistance=if(mode=="FILLET") requested/kotlin.math.tan(half).coerceAtLeast(1e-5f) else requested
+                                                if(theta < 0.02f || kotlin.math.abs(PI.toFloat()-theta) < 0.02f || !trimDistance.isFinite() || trimDistance <= 0f || trimDistance >= len1 || trimDistance >= len2) {
+                                                    status = "المسافة كبيرة أو زاوية التقاطع غير مناسبة؛ قلل القيمة."
+                                                } else {
+                                                    val e1x=v1x/len1; val e1y=v1y/len1
+                                                    val e2x=v2x/len2; val e2y=v2y/len2
+                                                    val p=Offset(corner.x+e1x*trimDistance,corner.y+e1y*trimDistance)
+                                                    val q=Offset(corner.x+e2x*trimDistance,corner.y+e2y*trimDistance)
+                                                    val newFirst=if(firstStartNear) listOf(p,pFar) else listOf(pFar,p)
+                                                    val newSecond=if(secondStartNear) listOf(q,qFar) else listOf(qFar,q)
+                                                    val updated=cadEntities.toMutableList()
+                                                    updated[selected]=first.copy(points=newFirst)
+                                                    updated[hit]=second.copy(points=newSecond)
+                                                    if(mode=="CHAMFER") {
+                                                        updated.add(CadEntity("LINE",listOf(p,q),first.layer))
+                                                        cadEntities=updated
+                                                        status="تم تنفيذ CHAMFER بمسافة ${distanceMeters} م."
+                                                    } else {
+                                                        val bx=e1x+e2x; val by=e1y+e2y
+                                                        val bl=hypot(bx.toDouble(),by.toDouble()).toFloat()
+                                                        if(bl<1e-5f) status="تعذر حساب منصف زاوية FILLET."
+                                                        else {
+                                                            val bisX=bx/bl; val bisY=by/bl
+                                                            val sinHalf=kotlin.math.sin(half).coerceAtLeast(1e-5f)
+                                                            val center=Offset(corner.x+bisX*(requested/sinHalf),corner.y+bisY*(requested/sinHalf))
+                                                            val mid=Offset(center.x-bisX*requested,center.y-bisY*requested)
+                                                            updated.add(CadEntity("ARC",listOf(p,mid,q),first.layer))
+                                                            cadEntities=updated
+                                                            status="تم تنفيذ FILLET بنصف قطر ${distanceMeters} م."
+                                                        }
+                                                    }
+                                                    cadRedo=emptyList()
                                                 }
                                             }
                                         }
