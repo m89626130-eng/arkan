@@ -145,6 +145,9 @@ private fun ArkanApp() {
     var newLayerName by remember { mutableStateOf("") }
     var newLayerColor by remember { mutableStateOf(0xFF00C8A0L) }
     var showLayerMenu by remember { mutableStateOf(false) }
+    var showDrawTools by remember { mutableStateOf(true) }
+    var showEditTools by remember { mutableStateOf(true) }
+    var showLayerTools by remember { mutableStateOf(true) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
     var viewZoom by remember { mutableStateOf(1f) }
@@ -436,66 +439,86 @@ private fun ArkanApp() {
                     OutlinedButton(onClick = { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f); status = "تصغير العرض: ${(viewZoom * 100).toInt()}%" }, modifier = Modifier.weight(1f)) { Text("－ تصغير") }
                     OutlinedButton(onClick = { viewZoom = 1f; status = "تمت إعادة مستوى التقريب إلى 100%." }, modifier = Modifier.weight(1f)) { Text("ملاءمة") }
                 }
-                Text("الطبقات / LAYERS", color = Color(0xFF00C8A0), fontSize = 13.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) {
-                        OutlinedButton(onClick = { showLayerMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("الطبقة الحالية: $currentCadLayer") }
-                        DropdownMenu(expanded = showLayerMenu, onDismissRequest = { showLayerMenu = false }) {
-                            cadLayers.forEach { layer -> DropdownMenuItem(text = { Text(layer.name) }, onClick = { currentCadLayer = layer.name; showLayerMenu = false; status = "الطبقة الحالية: ${layer.name}" }) }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(onClick = { showDrawTools = !showDrawTools }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (showDrawTools) "DRAW  ▾  أدوات الرسم" else "DRAW  ▸  أدوات الرسم")
+                    }
+                    if (showDrawTools) {
+                        Text("أدوات الرسم CAD", color = Color(0xFF00C8A0), fontSize = 13.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { if (cadEntities.isNotEmpty()) { cadRedo = cadRedo + cadEntities.last(); cadEntities = cadEntities.dropLast(1); status = "تم التراجع عن آخر عنصر CAD." } else status = "لا توجد عناصر CAD للتراجع." }, modifier = Modifier.weight(1f)) { Text("Undo") }
+                            OutlinedButton(onClick = { if (cadRedo.isNotEmpty()) { cadEntities = cadEntities + cadRedo.last(); cadRedo = cadRedo.dropLast(1); status = "تمت إعادة العنصر CAD." } else status = "لا توجد خطوة لإعادتها." }, modifier = Modifier.weight(1f)) { Text("Redo") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf("LINE", "POLYLINE", "CIRCLE").forEach { tool ->
+                                OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
+                            }
+                        }
+
+                    }
+                    OutlinedButton(onClick = { showEditTools = !showEditTools }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (showEditTools) "EDIT  ▾  أدوات التعديل" else "EDIT  ▸  أدوات التعديل")
+                    }
+                    if (showEditTools) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf("MOVE", "COPY", "ROTATE").forEach { tool ->
+                                OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf("TRIM", "EXTEND", "STRETCH").forEach { tool ->
+                                OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; "STRETCH" -> "حدد العنصر ثم اختر الرأس المراد سحبه ثم موضعه الجديد."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf("FILLET", "CHAMFER").forEach { tool ->
+                                OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(cadOffsetDistance,{cadOffsetDistance=it},label={Text("مسافة OFFSET م")},modifier=Modifier.weight(1f),singleLine=true)
+                            OutlinedTextField(cadCornerDistance,{cadCornerDistance=it},label={Text("FILLET R / CHAMFER م")},modifier=Modifier.weight(1f),singleLine=true)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { mode = "TEXT"; cadDraft = emptyList(); status = "اكتب النص ثم المس مكان وضعه على الرسم." }, modifier = Modifier.weight(1f)) { Text("TEXT") }
+                            OutlinedTextField(cadTextValue, { cadTextValue = it }, label = { Text("محتوى النص") }, modifier = Modifier.weight(2f), singleLine = true)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf("ARC", "RECTANGLE").forEach { tool ->
+                                OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
+                            }
+                            OutlinedButton(onClick = { if (cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList(); status = "تم إنهاء POLYLINE." } else status = "حدد نقطتين على الأقل."; cadDraft = emptyList() }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text("إنهاء", fontSize = 10.sp) }
                         }
                     }
-                    Button(onClick = { newLayerName = ""; newLayerColor = 0xFF00C8A0L; showNewLayerDialog = true }) { Text("＋ NEW LAYER") }
-                }
-                cadLayers.forEach { layer ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("●  ${layer.name}", color = Color(layer.color), fontSize = 11.sp)
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Text(if (layer.visible) "ظاهر" else "مخفي", color = Color.LightGray, fontSize = 10.sp)
-                            TextButton(onClick = { cadLayers = cadLayers.map { if (it.name == layer.name) it.copy(visible = !it.visible) else it }; status = if (layer.visible) "تم إخفاء ${layer.name}" else "تم إظهار ${layer.name}" }) { Text(if (layer.visible) "إخفاء" else "إظهار") }
-                            TextButton(onClick = { cadLayers = cadLayers.map { if (it.name == layer.name) it.copy(locked = !it.locked) else it }; status = if (layer.locked) "تم فتح ${layer.name}" else "تم قفل ${layer.name}" }) { Text(if (layer.locked) "فتح" else "قفل") }
+
+                    }
+                    OutlinedButton(onClick = { showLayerTools = !showLayerTools }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (showLayerTools) "LAYER  ▾  الطبقات والعرض" else "LAYER  ▸  الطبقات والعرض")
+                    }
+                    if (showLayerTools) {
+                        Text("الطبقات / LAYERS", color = Color(0xFF00C8A0), fontSize = 13.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { showLayerMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("الطبقة الحالية: $currentCadLayer") }
+                                DropdownMenu(expanded = showLayerMenu, onDismissRequest = { showLayerMenu = false }) {
+                                    cadLayers.forEach { layer -> DropdownMenuItem(text = { Text(layer.name) }, onClick = { currentCadLayer = layer.name; showLayerMenu = false; status = "الطبقة الحالية: ${layer.name}" }) }
+                                }
+                            }
+                            Button(onClick = { newLayerName = ""; newLayerColor = 0xFF00C8A0L; showNewLayerDialog = true }) { Text("＋ NEW LAYER") }
                         }
+                        cadLayers.forEach { layer ->
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("●  ${layer.name}", color = Color(layer.color), fontSize = 11.sp)
+                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Text(if (layer.visible) "ظاهر" else "مخفي", color = Color.LightGray, fontSize = 10.sp)
+                                    TextButton(onClick = { cadLayers = cadLayers.map { if (it.name == layer.name) it.copy(visible = !it.visible) else it }; status = if (layer.visible) "تم إخفاء ${layer.name}" else "تم إظهار ${layer.name}" }) { Text(if (layer.visible) "إخفاء" else "إظهار") }
+                                    TextButton(onClick = { cadLayers = cadLayers.map { if (it.name == layer.name) it.copy(locked = !it.locked) else it }; status = if (layer.locked) "تم فتح ${layer.name}" else "تم قفل ${layer.name}" }) { Text(if (layer.locked) "فتح" else "قفل") }
+                                }
+                            }
+                        }
+
                     }
                 }
-                Text("أدوات الرسم CAD", color = Color(0xFF00C8A0), fontSize = 13.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(onClick = { if (cadEntities.isNotEmpty()) { cadRedo = cadRedo + cadEntities.last(); cadEntities = cadEntities.dropLast(1); status = "تم التراجع عن آخر عنصر CAD." } else status = "لا توجد عناصر CAD للتراجع." }, modifier = Modifier.weight(1f)) { Text("Undo") }
-                    OutlinedButton(onClick = { if (cadRedo.isNotEmpty()) { cadEntities = cadEntities + cadRedo.last(); cadRedo = cadRedo.dropLast(1); status = "تمت إعادة العنصر CAD." } else status = "لا توجد خطوة لإعادتها." }, modifier = Modifier.weight(1f)) { Text("Redo") }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("LINE", "POLYLINE", "CIRCLE").forEach { tool ->
-                        OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("MOVE", "COPY", "ROTATE").forEach { tool ->
-                        OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("TRIM", "EXTEND", "STRETCH").forEach { tool ->
-                        OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; "STRETCH" -> "حدد العنصر ثم اختر الرأس المراد سحبه ثم موضعه الجديد."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("FILLET", "CHAMFER").forEach { tool ->
-                        OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(cadOffsetDistance,{cadOffsetDistance=it},label={Text("مسافة OFFSET م")},modifier=Modifier.weight(1f),singleLine=true)
-                    OutlinedTextField(cadCornerDistance,{cadCornerDistance=it},label={Text("FILLET R / CHAMFER م")},modifier=Modifier.weight(1f),singleLine=true)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(onClick = { mode = "TEXT"; cadDraft = emptyList(); status = "اكتب النص ثم المس مكان وضعه على الرسم." }, modifier = Modifier.weight(1f)) { Text("TEXT") }
-                    OutlinedTextField(cadTextValue, { cadTextValue = it }, label = { Text("محتوى النص") }, modifier = Modifier.weight(2f), singleLine = true)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("ARC", "RECTANGLE").forEach { tool ->
-                        OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
-                    }
-                    OutlinedButton(onClick = { if (cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList(); status = "تم إنهاء POLYLINE." } else status = "حدد نقطتين على الأقل."; cadDraft = emptyList() }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text("إنهاء", fontSize = 10.sp) }
-                }
-            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Box(modifier = Modifier.weight(1f)) {
                     Button(onClick = { showPipeDiameterMenu = true }, modifier = Modifier.fillMaxWidth()) {
