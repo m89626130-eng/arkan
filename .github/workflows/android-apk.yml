@@ -19,10 +19,40 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Android SDK
+      - name: Set up Android SDK and NDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018 cmake;3.22.1'
+      - name: Install LibreDWG build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git ninja-build file
+      - name: Get LibreDWG 0.14 source
+        run: |
+          git clone --recurse-submodules --depth 1 --branch 0.14 https://github.com/LibreDWG/libredwg.git libredwg
+          git -C libredwg submodule update --init --recursive
+      - name: Build LibreDWG Android ARM64 converters
+        run: |
+          cmake -S libredwg -B build-libredwg -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLIBREDWG_LIBONLY=OFF \
+            -DLIBREDWG_DISABLE_WRITE=OFF \
+            -DLIBREDWG_DISABLE_JSON=OFF \
+            -DBUILD_TESTING=OFF \
+            -DENABLE_LTO=OFF \
+            -DDISABLE_WERROR=ON
+          cmake --build build-libredwg --target dwg2dxf dxf2dwg --parallel 2
+          mkdir -p app/src/main/jniLibs/arm64-v8a
+          find build-libredwg -type f -name dwg2dxf -exec cp {} app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so \;
+          find build-libredwg -type f -name dxf2dwg -exec cp {} app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so \;
+          test -s app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so
+          test -s app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
+          file app/src/main/jniLibs/arm64-v8a/libdwg2dxf.so app/src/main/jniLibs/arm64-v8a/libdxf2dwg.so
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
@@ -49,3 +79,4 @@ jobs:
           name: ARKAN-CAD-PRO-stable-signed-apk
           path: app/build/outputs/apk/debug/ARKAN-CAD-PRO.apk
           if-no-files-found: error
+          retention-days: 7
