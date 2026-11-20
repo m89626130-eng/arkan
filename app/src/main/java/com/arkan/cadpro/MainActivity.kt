@@ -31,6 +31,9 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.hypot
 import kotlin.math.pow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val PX_PER_METER = 40f
 private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Double): Pair<Double, Double> =
@@ -126,6 +129,8 @@ private fun ArkanApp() {
     val diameterUnclassifiedLength = importedUnclassifiedGeometryLength
     val trenchVolume = effectivePipeLength * (trenchWidth.toDoubleOrNull() ?: 0.0) * (trenchDepth.toDoubleOrNull() ?: 0.0)
 
+    val importScope = rememberCoroutineScope()
+
     val dxfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             try {
@@ -146,20 +151,38 @@ private fun ArkanApp() {
     }
 
     val dwgPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) try {
-            val convertedFile = LibreDwgRunner.convertDwgToDxf(context, uri)
-            val converted = DxfKmlImporter.convert(convertedFile.readText(Charsets.UTF_8))
-            importedKml = converted.kml
-            importedSummary = converted.summary
-            importedLayerLengths = converted.layerLengths
-            importedManholeCount = converted.manholeCount
-            importedManholes = converted.manholes
-            importedPaths = converted.paths
-            importedDiameterLengths = converted.diameterLengths
-            importedUnclassifiedGeometryLength = converted.unclassifiedGeometryLength
-            dxfFileName = uri.lastPathSegment ?: "DWG"
-            status = "تم تحويل DWG واستيراد هندسته: $importedSummary"
-        } catch (e: Exception) { status = "تعذر استيراد DWG: " + e.message }
+        if (uri == null) {
+            status = "لم يتم اختيار ملف DWG."
+        } else {
+            status = "تم اختيار ملف DWG؛ جارٍ نسخ الملف وتحويله وقراءة هندسته..."
+            importScope.launch {
+                try {
+                    val converted = withContext(Dispatchers.IO) {
+                        val convertedFile = LibreDwgRunner.convertDwgToDxf(context, uri)
+                        check(convertedFile.isFile && convertedFile.length() > 0L) {
+                            "أداة التحويل لم تُنتج ملف DXF."
+                        }
+                        val dxfText = convertedFile.readText(Charsets.UTF_8)
+                        check(dxfText.contains("SECTION", true) && dxfText.contains("ENTITIES", true)) {
+                            "ناتج المحوّل ليس DXF صالحاً أو لا يحتوي قسم ENTITIES."
+                        }
+                        DxfKmlImporter.convert(dxfText)
+                    }
+                    importedKml = converted.kml
+                    importedSummary = converted.summary
+                    importedLayerLengths = converted.layerLengths
+                    importedManholeCount = converted.manholeCount
+                    importedManholes = converted.manholes
+                    importedPaths = converted.paths
+                    importedDiameterLengths = converted.diameterLengths
+                    importedUnclassifiedGeometryLength = converted.unclassifiedGeometryLength
+                    dxfFileName = uri.lastPathSegment ?: "DWG"
+                    status = "اكتمل استيراد DWG: " + converted.summary
+                } catch (e: Throwable) {
+                    status = "فشل استيراد DWG: " + (e.message ?: e.javaClass.simpleName)
+                }
+            }
+        }
     }
 
     val lispPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
