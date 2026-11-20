@@ -59,8 +59,8 @@ private fun connectedManholes(pipe: Pipe, manholes: List<Manhole>): Pair<Manhole
     return if (start.id != end.id && start.invertLevel != null && end.invertLevel != null) start to end else null
 }
 
-private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double, val altitude: Double = 0.0, val groundLevel: Double? = null, val invertLevel: Double? = null, val coordinatesKnown: Boolean = true) {
-    val type: String get() = when { depth <= 0.0 -> "غير معروف"; depth <= 1.70 -> "AS"; depth <= 3.00 -> "BS"; depth <= 4.00 -> "CS"; else -> "CD" }
+private data class Manhole(val id: String, val point: Offset, val depth: Double, val length: Double, val width: Double, val northing: Double, val easting: Double, val altitude: Double = 0.0, val groundLevel: Double? = null, val invertLevel: Double? = null, val coordinatesKnown: Boolean = true, val manualType: String? = null) {
+    val type: String get() = manualType ?: when { depth <= 0.0 -> "غير معروف"; depth <= 1.70 -> "AS"; depth <= 3.00 -> "BS"; depth <= 4.00 -> "CS"; else -> "CD" }
     val isCircular: Boolean get() = depth >= 1.70
     val excavation: Double get() = if (isCircular) kotlin.math.PI * (length / 2.0) * (length / 2.0) * depth else length * width * depth
 }
@@ -101,6 +101,8 @@ private fun ArkanApp() {
     var mhEasting by remember { mutableStateOf("") }
     var mhGroundLevel by remember { mutableStateOf("") }
     var mhInvertLevel by remember { mutableStateOf("") }
+    var mhFirstType by remember { mutableStateOf("AS") }
+    var showMhFirstTypeMenu by remember { mutableStateOf(false) }
     var pendingManhole by remember { mutableStateOf<Manhole?>(null) }
     val context = LocalContext.current
 
@@ -440,8 +442,20 @@ private fun ArkanApp() {
             OutlinedTextField(mhId,{mhId=it},label={Text("رقم المنهول")},singleLine=true)
             OutlinedTextField(mhDepth,{mhDepth=it},label={Text("العمق (م)")},singleLine=true)
             val previewDepth = (mhGroundLevel.toDoubleOrNull()?.let { gl -> mhInvertLevel.toDoubleOrNull()?.let { inv -> gl - inv } }) ?: mhDepth.toDoubleOrNull() ?: 0.0
-            val previewType = when { previewDepth <= 0.0 -> "غير معروف"; previewDepth <= 1.70 -> "AS"; previewDepth <= 3.00 -> "BS"; previewDepth <= 4.00 -> "CS"; else -> "CD" }
-            Text("نوع المنهول تلقائياً حسب العمق: $previewType", color = Color(0xFF00C8A0))
+            val automaticType = when { previewDepth <= 0.0 -> "غير معروف"; previewDepth <= 1.70 -> "AS"; previewDepth <= 3.00 -> "BS"; previewDepth <= 4.00 -> "CS"; else -> "CD" }
+            if (manholes.isEmpty()) {
+                Text("نوع المنهول الأول (اختيار يدوي):", color = Color(0xFF00C8A0))
+                Box {
+                    OutlinedButton(onClick = { showMhFirstTypeMenu = true }) { Text(mhFirstType) }
+                    DropdownMenu(expanded = showMhFirstTypeMenu, onDismissRequest = { showMhFirstTypeMenu = false }) {
+                        listOf("AS", "BS", "CS", "CD").forEach { type ->
+                            DropdownMenuItem(text = { Text(type) }, onClick = { mhFirstType = type; showMhFirstTypeMenu = false })
+                        }
+                    }
+                }
+            } else {
+                Text("نوع المنهول تلقائياً حسب العمق: $automaticType", color = Color(0xFF00C8A0))
+            }
             OutlinedTextField(mhGroundLevel,{mhGroundLevel=it},label={Text("GL / منسوب سطح الأرض (اختياري)")},singleLine=true)
             OutlinedTextField(mhInvertLevel,{mhInvertLevel=it},label={Text("INV / منسوب قاع الأنبوب (اختياري)")},singleLine=true)
             Text("يُحدد نوع المنهول تلقائياً من العمق H، أو من الفرق GL - INV عند إدخالهما معاً. تُحدد الإحداثيات لاحقاً من المخطط الجغرافي عند توفر ربط DXF.")
@@ -458,9 +472,9 @@ private fun ArkanApp() {
                 require(id !in manholes.map { it.id }) { "رقم المنهول مستخدم مسبقاً." }
                 val length = if (d >= 1.70) 0.7318 else 1.10
                 val width = if (d >= 1.70) 0.7318 else 0.70
-                pendingManhole=Manhole(id,Offset.Zero,d,length,width,n,e,groundLevel=gl,invertLevel=inv,coordinatesKnown=false)
+                pendingManhole=Manhole(id,Offset.Zero,d,length,width,n,e,groundLevel=gl,invertLevel=inv,coordinatesKnown=false,manualType=if (manholes.isEmpty()) mhFirstType else null)
                 mode="MANHOLE";showManholeDialog=false;status="المس مساحة الرسم لتحديد موقع المنهول."
-            } catch(_:Exception) { status="أدخل العمق أو GL وINV بشكل صحيح؛ العمق حتى 4.00م، ولا تكرر رقم المنهول." }
+            } catch(_:Exception) { status="أدخل العمق أو GL وINV بشكل صحيح، ولا تكرر رقم المنهول." }
         }) { Text("التالي: تحديد الموقع") }},
         dismissButton={TextButton(onClick={showManholeDialog=false}) { Text("إلغاء") }}
     )
