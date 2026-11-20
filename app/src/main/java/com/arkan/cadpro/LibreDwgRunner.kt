@@ -6,22 +6,21 @@ import java.io.File
 
 internal object LibreDwgRunner {
     private fun converter(context: Context, name: String): File {
-        require(name == "dwg2dxf" || name == "dxf2dwg") { "اسم محول DWG غير صالح." }
-        val directory = File(context.noBackupFilesDir, "dwg/arm64-v8a")
-        check(directory.exists() || directory.mkdirs()) { "تعذر تجهيز مجلد أدوات DWG." }
-        val destination = File(directory, name)
-        if (!destination.isFile || destination.length() == 0L) {
-            context.assets.open("dwg/arm64-v8a/$name").use { source ->
-                destination.outputStream().use { target -> source.copyTo(target) }
-            }
+        val libraryName = when (name) {
+            "dwg2dxf" -> "libdwg2dxf.so"
+            "dxf2dwg" -> "libdxf2dwg.so"
+            else -> error("اسم محول DWG غير صالح.")
         }
-        check(destination.isFile && destination.length() > 0L) {
-            "أداة DWG $name غير موجودة داخل التطبيق."
+        // Android extracts JNI libraries into the app's nativeLibraryDir,
+        // a location intended for executable native code.
+        val executable = File(context.applicationInfo.nativeLibraryDir, libraryName)
+        check(executable.isFile && executable.length() > 0L) {
+            "أداة DWG $name غير موجودة داخل مجلد المكتبات الأصلي للتطبيق."
         }
-        check(destination.setExecutable(true, true) || destination.canExecute()) {
-            "تعذر تفعيل أداة DWG $name."
+        check(executable.canExecute()) {
+            "لا يسمح Android بتشغيل أداة DWG $name من مجلد المكتبات."
         }
-        return destination
+        return executable
     }
 
     private fun run(executable: File, input: File, output: File) {
@@ -39,7 +38,7 @@ internal object LibreDwgRunner {
         val input = File(context.cacheDir, "input-$stamp.dwg")
         context.contentResolver.openInputStream(uri)?.use { source ->
             input.outputStream().use { target -> source.copyTo(target) }
-        } ?: error("تعذر قراءة ملف DWG")
+        } ?: error("تعذر قراءة ملف DWG من موفر الملفات.")
         val output = File(context.cacheDir, "converted-$stamp.dxf")
         run(converter(context, "dwg2dxf"), input, output)
         return output
