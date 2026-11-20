@@ -33,6 +33,8 @@ import kotlin.math.hypot
 import kotlin.math.pow
 
 private const val PX_PER_METER = 40f
+private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Double): Pair<Double, Double> =
+    (originEasting + point.x / PX_PER_METER) to (originNorthing - point.y / PX_PER_METER)
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
 
 private fun pipeLayerColor(layer: String): Color {
@@ -84,6 +86,9 @@ private fun ArkanApp() {
     var status by remember { mutableStateOf("اختر أداة ثم المس مساحة الرسم.") }
     var showManholeDialog by remember { mutableStateOf(false) }
     var showKmlDialog by remember { mutableStateOf(false) }
+    var showGeoDialog by remember { mutableStateOf(false) }
+    var referenceEasting by remember { mutableStateOf("") }
+    var referenceNorthing by remember { mutableStateOf("") }
     var dxfFileName by remember { mutableStateOf("لم يتم اختيار DXF") }
     var importedKml by remember { mutableStateOf<String?>(null) }
     var importedSummary by remember { mutableStateOf("") }
@@ -240,9 +245,12 @@ private fun ArkanApp() {
 
     val dxfSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/dxf")) { uri: Uri? ->
         if (uri != null) try {
-            val dxf = buildArkanDxf(pipes, effectiveManholes)
+            val e0 = referenceEasting.toDoubleOrNull() ?: error("أدخل Easting لنقطة مرجعية UTM أولاً.")
+            val n0 = referenceNorthing.toDoubleOrNull() ?: error("أدخل Northing لنقطة مرجعية UTM أولاً.")
+            require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) { "إحداثيات UTM غير صحيحة." }
+            val dxf = buildArkanDxf(pipes, effectiveManholes, e0, n0)
             context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
-            status = "تم تصدير الرسم بصيغة DXF. الإحداثيات محلية بوحدة المتر حسب مساحة الرسم."
+            status = "تم تصدير DXF بإحداثيات UTM Zone 38N. تحقق من صحة النقطة المرجعية."
         } catch (e: Exception) { status = "تعذر تصدير DXF: ${e.message}" }
     }
 
@@ -275,6 +283,7 @@ private fun ArkanApp() {
             Text("V1.10 • حساب المناهيل والميول تلقائياً", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = { showGeoDialog = true }) { Text("النقطة المرجعية UTM") }
                 Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }) { Text("استيراد DXF") }
                 Button(onClick = { mode = "PIPE"; pipeStart = null }) { Text("رسم أنبوب") }
                 Button(onClick = { showManholeDialog = true }) { Text("إضافة منهول") }
@@ -497,6 +506,32 @@ private fun ArkanApp() {
         dismissButton={TextButton(onClick={showManholeDialog=false}) { Text("إلغاء") }}
     )
 
+    if (showGeoDialog) AlertDialog(
+        onDismissRequest = { showGeoDialog = false },
+        title = { Text("النقطة المرجعية UTM Zone 38N") },
+        text = { Column {
+            Text("أدخل إحداثيات الزاوية العليا اليسرى لمساحة الرسم: E = Easting و N = Northing. يفترض التحويل أن محور X يتجه شرقاً ومحور Y على الشاشة يتجه جنوباً.")
+            OutlinedTextField(referenceEasting, { referenceEasting = it }, label = { Text("Easting (E) بالمتر") }, singleLine = true)
+            OutlinedTextField(referenceNorthing, { referenceNorthing = it }, label = { Text("Northing (N) بالمتر") }, singleLine = true)
+            Text("يلزم إدخال نقطة مرجعية معروفة؛ المسافات وحدها لا تحدد الموقع الحقيقي.")
+        } },
+        confirmButton = { TextButton(onClick = {
+            val e0 = referenceEasting.toDoubleOrNull()
+            val n0 = referenceNorthing.toDoubleOrNull()
+            if (e0 == null || n0 == null || e0 !in 100000.0..900000.0 || n0 !in 0.0..10000000.0) {
+                status = "أدخل إحداثيات UTM صحيحة."
+            } else {
+                manholes = manholes.map { mh ->
+                    val (e, n) = localToUtm(mh.point, e0, n0)
+                    mh.copy(easting = e, northing = n, coordinatesKnown = true)
+                }
+                showGeoDialog = false
+                status = "تم ضبط مرجع UTM 38N وتحديث إحداثيات المناهيل."
+            }
+        }) { Text("حفظ المرجع") } },
+        dismissButton = { TextButton(onClick = { showGeoDialog = false }) { Text("إلغاء") } }
+    )
+
     if(showKmlDialog) AlertDialog(
         onDismissRequest={showKmlDialog=false},title={Text(if (importedKml != null || manholes.isNotEmpty()) "تصدير شبكة المجاري KML" else "نقطة مرجعية KML / WGS84")},
         text={Column {
@@ -514,21 +549,23 @@ private fun ArkanApp() {
 }
 
 
-private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>): String {
+private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, originEasting: Double, originNorthing: Double): String {
     val out = StringBuilder()
     fun pair(code: Int, value: Any) { out.append(code).append("\r\n").append(value).append("\r\n") }
     fun entity(type: String, layer: String) { pair(0, type); pair(8, layer) }
     pair(0, "SECTION"); pair(2, "HEADER")
     pair(9, "$" + "INSUNITS"); pair(70, 6)
+    pair(9, "$" + "MEASUREMENT"); pair(70, 1)
     pair(0, "ENDSEC"); pair(0, "SECTION"); pair(2, "ENTITIES")
     pipes.forEach { pipe ->
         entity("LINE", pipe.layer.ifBlank { "SEWER" })
-        pair(10, pipe.a.x / PX_PER_METER); pair(20, -pipe.a.y / PX_PER_METER); pair(30, 0)
-        pair(11, pipe.b.x / PX_PER_METER); pair(21, -pipe.b.y / PX_PER_METER); pair(31, 0)
+        val (ax, ay) = localToUtm(pipe.a, originEasting, originNorthing)
+        val (bx, by) = localToUtm(pipe.b, originEasting, originNorthing)
+        pair(10, ax); pair(20, ay); pair(30, 0)
+        pair(11, bx); pair(21, by); pair(31, 0)
     }
     manholes.forEach { mh ->
-        val x = mh.point.x / PX_PER_METER
-        val y = -mh.point.y / PX_PER_METER
+        val (x, y) = localToUtm(mh.point, originEasting, originNorthing)
         if (mh.isCircular) {
             entity("CIRCLE", "MANHOLES")
             pair(10, x); pair(20, y); pair(30, 0); pair(40, 0.7318 / 2.0)
