@@ -206,6 +206,24 @@ private fun ArkanApp() {
     fun cadEntityColor(entity: CadEntity): Color = Color(entity.color ?: (cadLayers.firstOrNull { it.name == entity.layer }?.color ?: 0xFFFFFFFF))
     val visibleCadEntities = cadEntities.filter { entity -> cadLayers.firstOrNull { it.name == entity.layer }?.visible != false }
 
+    fun finishPendingCadDraft() {
+        val points = cadDraft
+        val completed = when (mode) {
+            "LINE" -> if (points.size >= 2) CadEntity("LINE", points.take(2), currentCadLayer) else null
+            "POLYLINE" -> if (points.size >= 2) CadEntity("POLYLINE", points, currentCadLayer) else null
+            "CIRCLE" -> if (points.size >= 2) CadEntity("CIRCLE", points.take(2), currentCadLayer) else null
+            "RECTANGLE" -> if (points.size >= 2) CadEntity("RECTANGLE", points.take(2), currentCadLayer) else null
+            "ARC" -> if (points.size >= 3) CadEntity("ARC", points.take(3), currentCadLayer) else null
+            else -> null
+        }
+        if (completed != null) {
+            cadEntities = cadEntities + completed
+            cadRedo = emptyList()
+            status = "تم حفظ شكل $mode قبل الانتقال إلى EDIT."
+        }
+        cadDraft = emptyList()
+    }
+
     val totalLength = pipes.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER }
     val effectiveManholes = if (importedKml != null) importedManholes else manholes
     val totalExcavation = effectiveManholes.sumOf { it.excavation }
@@ -545,17 +563,17 @@ private fun ArkanApp() {
                     if (showEditTools) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             listOf("MOVE", "COPY", "ROTATE").forEach { tool ->
-                                OutlinedButton(onClick = { if (mode == "POLYLINE" && cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList() }; mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                                OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             listOf("TRIM", "EXTEND", "STRETCH").forEach { tool ->
-                                OutlinedButton(onClick = { if (mode == "POLYLINE" && cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList() }; mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; "STRETCH" -> "حدد العنصر ثم اختر الرأس المراد سحبه ثم موضعه الجديد."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                                OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = when(tool) { "TRIM" -> "حدد خط القطع ثم العنصر المراد تشذيبه."; "EXTEND" -> "حدد خط الحد ثم العنصر المراد تمديده."; "STRETCH" -> "حدد العنصر ثم اختر الرأس المراد سحبه ثم موضعه الجديد."; else -> "المس العنصر الذي تريد حذفه." } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                             listOf("FILLET", "CHAMFER").forEach { tool ->
-                                OutlinedButton(onClick = { if (mode == "POLYLINE" && cadDraft.size >= 2) { cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer); cadRedo = emptyList() }; mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                                OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = "اختر خطين متقاطعين لتنفيذ $tool." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1052,7 +1070,7 @@ private fun ArkanApp() {
                         "POLYLINE" -> entity.points.zipWithNext().forEach { (a,b) -> drawLine(entityColor, a, b, 2f) }
                         "CIRCLE" -> if (entity.points.size >= 2) {
                             val c = entity.points[0]; val edge = entity.points[1]
-                            drawCircle(Color.White, hypot((edge.x-c.x).toDouble(), (edge.y-c.y).toDouble()).toFloat(), c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                            drawCircle(entityColor, hypot((edge.x-c.x).toDouble(), (edge.y-c.y).toDouble()).toFloat(), c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
                         }
                         "RECTANGLE" -> if (entity.points.size >= 2) {
                             val a = entity.points[0]; val b = entity.points[1]
