@@ -282,11 +282,15 @@ private fun ArkanApp() {
             Text("ARKAN CAD PRO", color = Color(0xFF00C8A0), fontSize = 24.sp)
             Text("V1.10 • حساب المناهيل والميول تلقائياً", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(onClick = { showGeoDialog = true }) { Text("النقطة المرجعية UTM") }
-                Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }) { Text("استيراد DXF") }
-                Button(onClick = { mode = "PIPE"; pipeStart = null }) { Text("رسم أنبوب") }
-                Button(onClick = { showManholeDialog = true }) { Text("إضافة منهول") }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { showGeoDialog = true }, modifier = Modifier.weight(1f)) { Text("النقطة المرجعية UTM") }
+                    Button(onClick = { dxfPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("استيراد DXF") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { mode = "PIPE"; pipeStart = null }, modifier = Modifier.weight(1f)) { Text("رسم أنبوب") }
+                    Button(onClick = { showManholeDialog = true }, modifier = Modifier.weight(1f)) { Text("إضافة منهول") }
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Box(modifier = Modifier.weight(1f)) {
