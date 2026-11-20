@@ -1195,7 +1195,7 @@ private fun ArkanApp() {
                     Triple("DIAMETER", "Ø", "DIAMETER"),
                     Triple("ANNOTATION", "T", "ANNOTATION"),
                     Triple("SEWER NETWORK", "◎", "SEWER"),
-                    Triple("EXPORT", "⇧", "EXPORT")
+                    Triple("EXPORT", "⇧", "التصدير")
                 ).forEach { (tab, icon, title) ->
                     CadPaletteButton(icon, title, { selectedCadTab = tab }, selected = selectedCadTab == tab)
                 }
