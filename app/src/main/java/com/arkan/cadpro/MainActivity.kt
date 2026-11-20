@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -136,6 +137,7 @@ private fun ArkanApp() {
     var cadEntities by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadEditSelection by remember { mutableStateOf<Int?>(null) }
+    var viewZoom by remember { mutableStateOf(1f) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
@@ -412,6 +414,11 @@ private fun ArkanApp() {
                     Button(onClick = { mode = "PIPE"; pipeStart = null }, modifier = Modifier.weight(1f)) { Text("رسم أنبوب") }
                     Button(onClick = { showManholeDialog = true }, modifier = Modifier.weight(1f)) { Text("إضافة منهول") }
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { viewZoom = (viewZoom * 1.25f).coerceAtMost(6f); status = "تكبير العرض: ${(viewZoom * 100).toInt()}%" }, modifier = Modifier.weight(1f)) { Text("＋ تكبير") }
+                    OutlinedButton(onClick = { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f); status = "تصغير العرض: ${(viewZoom * 100).toInt()}%" }, modifier = Modifier.weight(1f)) { Text("－ تصغير") }
+                    OutlinedButton(onClick = { viewZoom = 1f; status = "تمت إعادة مستوى التقريب إلى 100%." }, modifier = Modifier.weight(1f)) { Text("ملاءمة") }
+                }
                 Text("أدوات الرسم CAD", color = Color(0xFF00C8A0), fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { if (cadEntities.isNotEmpty()) { cadRedo = cadRedo + cadEntities.last(); cadEntities = cadEntities.dropLast(1); status = "تم التراجع عن آخر عنصر CAD." } else status = "لا توجد عناصر CAD للتراجع." }, modifier = Modifier.weight(1f)) { Text("Undo") }
@@ -464,7 +471,7 @@ private fun ArkanApp() {
             }
             Text(if (mode == "PIPE") "المس نقطتين لرسم مقطع أنبوب." else "المس مساحة الرسم لتحديد موقع المنهول.", color = Color(0xFFB8C7CE), fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
-            Canvas(Modifier.fillMaxWidth().height(360.dp).background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent) {
+            Canvas(Modifier.fillMaxWidth().height(360.dp).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom }.background(Color(0xFF080B0E), RoundedCornerShape(8.dp)).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {
                         cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft)
