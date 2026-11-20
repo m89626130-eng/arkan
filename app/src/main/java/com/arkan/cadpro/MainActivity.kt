@@ -981,17 +981,18 @@ private object DxfKmlImporter {
         // DXF is a sequence of group-code/value lines. Be tolerant of BOM,
         // CRLF/LF, blank lines and malformed records instead of losing pair alignment.
         val normalized = raw.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n')
-        val lines = normalized.split('\n')
+        val lines = normalized.split('\n').toMutableList()
+        while (lines.isNotEmpty() && lines.last().isEmpty()) lines.removeAt(lines.lastIndex)
+        require(lines.size % 2 == 0) {
+            "ملف DXF النصي غير مكتمل: عدد أسطر الأكواد والقيم غير متطابق."
+        }
         val pairs = mutableListOf<PairCode>()
         var i = 0
-        while (i < lines.size) {
+        while (i + 1 < lines.size) {
             val code = lines[i].trim().removePrefix("\uFEFF").toIntOrNull()
-            if (code == null || i + 1 >= lines.size) {
-                i++
-            } else {
-                pairs += PairCode(code, lines[i + 1].trim())
-                i += 2
-            }
+                ?: error("صيغة DXF غير صحيحة عند السطر ${i + 1}: كود المجموعة ليس رقماً.")
+            pairs += PairCode(code, lines[i + 1].trim())
+            i += 2
         }
 
         // A section starts with 0/SECTION followed by 2/ENTITIES.
