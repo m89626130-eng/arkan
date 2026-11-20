@@ -824,7 +824,7 @@ private fun ArkanApp() {
 }
 
 
-private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, originEasting: Double, originNorthing: Double): String {
+private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, cadEntities: List<CadEntity>, originEasting: Double, originNorthing: Double): String {
     val out = StringBuilder()
     fun pair(code: Int, value: Any) { out.append(code).append("\r\n").append(value).append("\r\n") }
     fun entity(type: String, layer: String) { pair(0, type); pair(8, layer) }
