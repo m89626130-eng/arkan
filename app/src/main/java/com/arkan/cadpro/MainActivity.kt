@@ -562,7 +562,7 @@ private fun ArkanApp() {
                     }
                     if (showEditTools) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                            listOf("MOVE", "COPY", "ROTATE").forEach { tool ->
+                            listOf("MOVE", "COPY", "ROTATE", "MIRROR").forEach { tool ->
                                 OutlinedButton(onClick = { finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
                             }
                         }
@@ -788,7 +788,7 @@ private fun ArkanApp() {
                                 status = "تم حذف العنصر."
                             } else status = "لم يتم تحديد عنصر قريب."
                         }
-                        mode in listOf("MOVE","COPY","OFFSET","ROTATE","STRETCH","TRIM","EXTEND","FILLET","CHAMFER") -> {
+                        mode in listOf("MOVE","COPY","OFFSET","ROTATE","MIRROR","STRETCH","TRIM","EXTEND","FILLET","CHAMFER") -> {
                             val selected = cadEditSelection
                             val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
                                 ?.takeIf { cadEntityDistance(tap,cadEntities[it]) <= 28f }
@@ -801,6 +801,7 @@ private fun ArkanApp() {
                                         "EXTEND" -> "تم تحديد خط الحد. المس العنصر المراد تمديده."
                                         "FILLET", "CHAMFER" -> "تم تحديد الخط الأول. اختر الخط الثاني."
                                         "ROTATE" -> "تم تحديد العنصر. حدد مركز الدوران ثم نقطة البداية ثم نقطة النهاية للزاوية."
+                                        "MIRROR" -> "تم تحديد العنصر. حدد نقطتي محور الانعكاس."
                                         "STRETCH" -> "تم تحديد العنصر. اختر الرأس/النقطة التي تريد تحريكها."
                                         else -> "تم تحديد ${cadEntities[hit].type}. حدد نقطة/جهة التنفيذ."
                                     }
@@ -926,7 +927,36 @@ private fun ArkanApp() {
                             } else {
                                 val entity = cadEntities.getOrNull(selected)
                                 if (entity == null) { cadEditSelection = null; status = "العنصر المحدد غير موجود." }
-                                else if (mode == "ROTATE") {
+                                else if (mode == "MIRROR") {
+                                    if (cadDraft.size < 2) {
+                                        cadDraft = cadDraft + tap
+                                        status = if (cadDraft.size == 1) "حدد النقطة الثانية لمحور الانعكاس." else "جارٍ تنفيذ MIRROR."
+                                    } else {
+                                        val axisA = cadDraft[0]
+                                        val axisB = cadDraft[1]
+                                        val vx = axisB.x - axisA.x
+                                        val vy = axisB.y - axisA.y
+                                        val lengthSquared = vx * vx + vy * vy
+                                        if (lengthSquared < 1e-6f) {
+                                            cadDraft = emptyList()
+                                            status = "محور الانعكاس قصير جداً؛ أعد تحديد النقطتين."
+                                        } else {
+                                            val reflected = entity.copy(points = entity.points.map { p ->
+                                                val px = p.x - axisA.x
+                                                val py = p.y - axisA.y
+                                                val projection = (px * vx + py * vy) / lengthSquared
+                                                val closestX = axisA.x + projection * vx
+                                                val closestY = axisA.y + projection * vy
+                                                Offset(2f * closestX - p.x, 2f * closestY - p.y)
+                                            })
+                                            cadEntities = cadEntities + reflected
+                                            cadRedo = emptyList()
+                                            cadEditSelection = null
+                                            cadDraft = emptyList()
+                                            status = "تم تنفيذ MIRROR مع الاحتفاظ بالعنصر الأصلي."
+                                        }
+                                    }
+                                } else if (mode == "ROTATE") {
                                     if (cadDraft.size < 2) {
                                         cadDraft = cadDraft + tap
                                         status = if(cadDraft.size == 1) "حدد نقطة بداية زاوية الدوران." else "حدد نقطة نهاية زاوية الدوران."
