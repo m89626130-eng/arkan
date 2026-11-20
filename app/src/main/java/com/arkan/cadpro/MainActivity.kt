@@ -44,6 +44,37 @@ private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Dou
     (originEasting + point.x / PX_PER_METER) to (originNorthing - point.y / PX_PER_METER)
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
 private data class CadEntity(val type: String, val points: List<Offset>, val layer: String = "0")
+private fun segmentDistance(p: Offset, a: Offset, b: Offset): Float {
+    val dx=b.x-a.x; val dy=b.y-a.y
+    val len2=dx*dx+dy*dy
+    if(len2<=1e-6f) return hypot((p.x-a.x).toDouble(),(p.y-a.y).toDouble()).toFloat()
+    val t=(((p.x-a.x)*dx+(p.y-a.y)*dy)/len2).coerceIn(0f,1f)
+    val q=Offset(a.x+t*dx,a.y+t*dy)
+    return hypot((p.x-q.x).toDouble(),(p.y-q.y).toDouble()).toFloat()
+}
+private fun cadEntityDistance(p: Offset, e: CadEntity): Float {
+    if(e.points.isEmpty()) return Float.MAX_VALUE
+    if(e.type=="CIRCLE" && e.points.size>=2) {
+        val radius=hypot((e.points[1].x-e.points[0].x).toDouble(),(e.points[1].y-e.points[0].y).toDouble()).toFloat()
+        return kotlin.math.abs(hypot((p.x-e.points[0].x).toDouble(),(p.y-e.points[0].y).toDouble()).toFloat()-radius)
+    }
+    val pts=if(e.type=="ARC") arcPoints(e.points,32) else if(e.type=="RECTANGLE" && e.points.size>=2) {
+        val a=e.points[0]; val b=e.points[1]
+        listOf(Offset(minOf(a.x,b.x),minOf(a.y,b.y)),Offset(maxOf(a.x,b.x),minOf(a.y,b.y)),Offset(maxOf(a.x,b.x),maxOf(a.y,b.y)),Offset(minOf(a.x,b.x),maxOf(a.y,b.y)),Offset(minOf(a.x,b.x),minOf(a.y,b.y)))
+    } else e.points
+    if(pts.size==1) return hypot((p.x-pts[0].x).toDouble(),(p.y-pts[0].y).toDouble()).toFloat()
+    return pts.zipWithNext().minOfOrNull { (a,b)->segmentDistance(p,a,b) } ?: Float.MAX_VALUE
+}
+private fun offsetCadPoints(points: List<Offset>, distance: Float, side: Float): List<Offset> {
+    if(points.size<2) return emptyList()
+    val sign=if(side>=0f) 1f else -1f
+    return points.indices.map { i ->
+        val prev=points[(i-1).coerceAtLeast(0)]; val next=points[(i+1).coerceAtMost(points.lastIndex)]
+        val dx=next.x-prev.x; val dy=next.y-prev.y
+        val len=hypot(dx.toDouble(),dy.toDouble()).toFloat().coerceAtLeast(1e-5f)
+        Offset(points[i].x-dy/len*distance*sign,points[i].y+dx/len*distance*sign)
+    }
+}
 private fun arcPoints(points: List<Offset>, steps: Int = 48): List<Offset> {
     if (points.size != 3) return emptyList()
     val a=points[0]; val m=points[1]; val b=points[2]
@@ -102,6 +133,8 @@ private fun ArkanApp() {
     var pipes by remember { mutableStateOf(listOf<Pipe>()) }
     var cadEntities by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadRedo by remember { mutableStateOf(listOf<CadEntity>()) }
+    var cadEditSelection by remember { mutableStateOf<Int?>(null) }
+    var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadDraft by remember { mutableStateOf(listOf<Offset>()) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
     var mode by remember { mutableStateOf("PIPE") }
@@ -388,6 +421,14 @@ private fun ArkanApp() {
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("MOVE", "COPY", "OFFSET").forEach { tool ->
+                        OutlinedButton(onClick = { mode = tool; cadEditSelection = null; cadDraft = emptyList(); status = if(tool=="OFFSET") "اختر العنصر ثم حدد جهة الإزاحة." else "اختر العنصر ثم حدد نقطة النقل." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 2.dp)) { Text(tool, fontSize = 10.sp) }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(cadOffsetDistance,{cadOffsetDistance=it},label={Text("مسافة OFFSET م")},modifier=Modifier.weight(1f),singleLine=true)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                     listOf("ARC", "RECTANGLE").forEach { tool ->
                         OutlinedButton(onClick = { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة $tool: حدد نقاط الرسم." }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(tool, fontSize = 10.sp) }
                     }
@@ -426,6 +467,41 @@ private fun ArkanApp() {
                     }
                 }, onTap = { tap ->
                     when {
+                        mode in listOf("MOVE","COPY","OFFSET") -> {
+                            val selected = cadEditSelection
+                            if (selected == null) {
+                                val hit = cadEntities.indices.minByOrNull { cadEntityDistance(tap,cadEntities[it]) }
+                                if (hit != null && cadEntityDistance(tap,cadEntities[hit]) <= 28f) {
+                                    cadEditSelection = hit
+                                    status = "تم تحديد ${cadEntities[hit].type}. حدد نقطة/جهة التنفيذ."
+                                } else status = "لم يتم تحديد عنصر قريب؛ المس على العنصر نفسه."
+                            } else {
+                                val entity = cadEntities.getOrNull(selected)
+                                if (entity == null) { cadEditSelection = null; status = "العنصر المحدد غير موجود." }
+                                else if (mode == "OFFSET") {
+                                    val d = cadOffsetDistance.toFloatOrNull()
+                                    if (d == null || d <= 0f) status = "أدخل مسافة OFFSET موجبة."
+                                    else if (entity.type !in listOf("LINE","POLYLINE")) status = "OFFSET يدعم حالياً LINE وPOLYLINE فقط."
+                                    else {
+                                        val a=entity.points.first(); val b=entity.points.last()
+                                        val side=(b.x-a.x)*(tap.y-a.y)-(b.y-a.y)*(tap.x-a.x)
+                                        val shifted=offsetCadPoints(entity.points,d*PX_PER_METER,side)
+                                        if(shifted.size>=2) { cadEntities=cadEntities+CadEntity(entity.type,shifted,entity.layer); cadRedo=emptyList(); status="تم إنشاء OFFSET بمقدار $d م." }
+                                        cadEditSelection=null
+                                    }
+                                } else {
+                                    val anchor=entity.points.firstOrNull()
+                                    if(anchor==null) { cadEditSelection=null; status="لا يمكن نقل هذا العنصر." }
+                                    else {
+                                        val dx=tap.x-anchor.x; val dy=tap.y-anchor.y
+                                        val moved=entity.copy(points=entity.points.map { Offset(it.x+dx,it.y+dy) })
+                                        if(mode=="MOVE") { cadEntities=cadEntities.toMutableList().also { it[selected]=moved }; status="تم نقل العنصر." }
+                                        else { cadEntities=cadEntities+moved; status="تم نسخ العنصر." }
+                                        cadRedo=emptyList(); cadEditSelection=null
+                                    }
+                                }
+                            }
+                        }
                         mode == "LINE" -> {
                             if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد نقطة نهاية LINE." }
                             else { cadEntities = cadEntities + CadEntity("LINE", listOf(cadDraft.first(), tap)); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم LINE." }
@@ -648,6 +724,7 @@ private fun ArkanApp() {
                 manholes = emptyList()
                 cadEntities = emptyList()
                 cadRedo = emptyList()
+                cadEditSelection = null
                 cadDraft = emptyList()
                 pipeStart = null
                 pendingManhole = null
