@@ -287,9 +287,6 @@ private fun ArkanApp() {
                 }
                 Button(onClick = { lispPicker.launch(arrayOf("*/*")) }) { Text("اختيار LSP") }
             }
-            Text("إعدادات الأنبوب", color = Color(0xFF00C8A0), fontSize = 14.sp)
-            OutlinedTextField(targetSlopePercent, { targetSlopePercent = it }, label = { Text("نسبة ميل الأنبوب المطلوبة (%)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("مثال: 0.50% — بعد ربط المنهولين، يحسب INV للمنهول التالي تلقائياً من طول الأنبوب.", color = Color.LightGray, fontSize = 10.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(trenchWidth, { trenchWidth = it }, label = { Text("عرض الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
                 OutlinedTextField(trenchDepth, { trenchDepth = it }, label = { Text("عمق الخندق م") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -467,8 +464,9 @@ private fun ArkanApp() {
             val previewDepth = mhGroundLevel.toDoubleOrNull()?.let { gl -> mhInvertLevel.toDoubleOrNull()?.let { inv -> gl - inv } } ?: 0.0
             val automaticType = when { previewDepth <= 0.0 -> "بانتظار INV"; previewDepth <= 1.70 -> "AS"; previewDepth <= 3.00 -> "BS"; previewDepth <= 4.00 -> "CS"; else -> "CD" }
             Text("نوع المنهول تلقائي حسب H = GL - INV: $automaticType", color = Color(0xFF00C8A0))
-            Text("أدخل GL لكل منهول. أدخل INV للمنهول الأول؛ ويمكن ترك INV للمناهيل التالية فارغاً ليحسبه البرنامج من نسبة الميل عند رسم الأنبوب. لا يوجد اختيار يدوي للنوع.", color = Color.LightGray, fontSize = 11.sp)
-            Text("نسبة ميل الأنبوب التالي: $targetSlopePercent %", color = Color(0xFF00C8A0), fontSize = 12.sp)
+            OutlinedTextField(targetSlopePercent, { targetSlopePercent = it }, label = { Text("نسبة الميول (%)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Text("أدخل نسبة الميل هنا، مثلاً 0.50 أو 1.00. يستخدمها البرنامج لحساب INV للمنهول التالي تلقائياً حسب طول الأنبوب.", color = Color.LightGray, fontSize = 11.sp)
+            Text("أدخل GL لكل منهول. أدخل INV للمنهول الأول؛ ويمكن ترك INV للمناهيل التالية فارغاً ليحسبه البرنامج من نسبة الميل أعلاه. نوع المنهول يُحدد تلقائياً ولا يحتاج اختياراً يدوياً.", color = Color.LightGray, fontSize = 11.sp)
         }},
         confirmButton={ TextButton(onClick={
             try {
