@@ -86,6 +86,7 @@ private fun ArkanApp() {
     var lispName by remember { mutableStateOf("لم يتم اختيار ملف LSP") }
     var status by remember { mutableStateOf("اختر أداة ثم المس مساحة الرسم.") }
     var showManholeDialog by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
     var showKmlDialog by remember { mutableStateOf(false) }
     var showGeoDialog by remember { mutableStateOf(false) }
     var referenceEasting by remember { mutableStateOf("") }
@@ -321,7 +322,7 @@ private fun ArkanApp() {
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { dwgPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) { Text("استيراد DWG") }
-                    Spacer(Modifier.weight(1f))
+                    OutlinedButton(onClick = { showClearConfirm = true }, modifier = Modifier.weight(1f)) { Text("مسح الرسم") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                     Button(onClick = { mode = "PIPE"; pipeStart = null }, modifier = Modifier.weight(1f)) { Text("رسم أنبوب") }
@@ -507,24 +508,7 @@ private fun ArkanApp() {
                 Button(onClick={showKmlDialog=true}) { Text("تصدير KML") }
                 Button(onClick={dxfSaver.launch("ARKAN_Sewer_Network.dxf")}) { Text("تصدير DXF") }
                 Button(onClick={dwgSaver.launch("ARKAN_Sewer_Network.dwg")}) { Text("تصدير DWG") }
-                Button(
-                    onClick = {
-                        pipes = emptyList()
-                        manholes = emptyList()
-                        pipeStart = null
-                        pendingManhole = null
-                        importedKml = null
-                        importedSummary = ""
-                        importedLayerLengths = emptyMap()
-                        importedManholeCount = 0
-                        importedManholes = emptyList()
-                        importedPaths = emptyList()
-                        importedDiameterLengths = emptyMap()
-                        importedUnclassifiedGeometryLength = 0.0
-                        dxfFileName = "لم يتم اختيار DXF"
-                        status = "تم مسح المشروع الحالي بالكامل، بما فيه بيانات DXF المستوردة."
-                    }
-                ) { Text("مسح المشروع") }
+
             }
             Text("ملف DXF: $dxfFileName",color=Color.LightGray,fontSize=10.sp)
             if (importedSummary.isNotBlank()) Text("العناصر المستوردة: $importedSummary",color=Color(0xFF00C8A0),fontSize=10.sp)
@@ -538,6 +522,35 @@ private fun ArkanApp() {
             }
         }
     }
+
+    if (showClearConfirm) AlertDialog(
+        onDismissRequest = { showClearConfirm = false },
+        title = { Text("تأكيد مسح الرسم") },
+        text = { Text("سيتم حذف عناصر الرسم الحالية والبيانات المستوردة من مساحة العمل. لن يتم حذف ملفات DWG أو DXF الأصلية من الهاتف. هل تريد المتابعة؟") },
+        confirmButton = {
+            TextButton(onClick = {
+                pipes = emptyList()
+                manholes = emptyList()
+                pipeStart = null
+                pendingManhole = null
+                importedKml = null
+                importedSummary = ""
+                importedLayerLengths = emptyMap()
+                importedManholeCount = 0
+                importedManholes = emptyList()
+                importedPaths = emptyList()
+                importedDiameterLengths = emptyMap()
+                importedUnclassifiedGeometryLength = 0.0
+                dxfFileName = "لم يتم اختيار ملف"
+                mode = "PIPE"
+                showClearConfirm = false
+                status = "تم مسح الرسم والبيانات من مساحة العمل."
+            }) { Text("نعم، امسح") }
+        },
+        dismissButton = {
+            TextButton(onClick = { showClearConfirm = false }) { Text("إلغاء") }
+        }
+    )
 
     if(showManholeDialog) AlertDialog(
         onDismissRequest={showManholeDialog=false}, title={Text("بيانات المنهول")},
