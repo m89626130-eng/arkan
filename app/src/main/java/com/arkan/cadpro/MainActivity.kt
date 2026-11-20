@@ -94,6 +94,7 @@ private fun ArkanApp() {
     var showGeoDialog by remember { mutableStateOf(false) }
     var referenceEasting by remember { mutableStateOf("") }
     var referenceNorthing by remember { mutableStateOf("") }
+    var utmZone by remember { mutableStateOf("38") }
     var dxfFileName by remember { mutableStateOf("لم يتم اختيار DXF") }
     var importedKml by remember { mutableStateOf<String?>(null) }
     var importedSummary by remember { mutableStateOf("") }
@@ -135,7 +136,7 @@ private fun ArkanApp() {
         if (uri != null) {
             try {
                 val raw = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: error("تعذر قراءة الملف")
-                val converted = DxfKmlImporter.convert(raw)
+                val converted = DxfKmlImporter.convert(raw, utmZone.toIntOrNull() ?: 38)
                 importedKml = converted.kml
                 importedSummary = converted.summary
                 importedLayerLengths = converted.layerLengths
@@ -166,7 +167,7 @@ private fun ArkanApp() {
                         check(dxfText.contains("SECTION", true) && dxfText.contains("ENTITIES", true)) {
                             "ناتج المحوّل ليس DXF صالحاً أو لا يحتوي قسم ENTITIES."
                         }
-                        DxfKmlImporter.convert(dxfText)
+                        DxfKmlImporter.convert(dxfText, utmZone.toIntOrNull() ?: 38)
                     }
                     importedKml = converted.kml
                     importedSummary = converted.summary
@@ -312,7 +313,7 @@ private fun ArkanApp() {
 
     val kmlSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")) { uri: Uri? ->
         if (uri != null) try {
-            val manualNetwork = if (importedKml == null && manholes.isNotEmpty()) DxfKmlImporter.convertManual(manholes, pipes) else null
+            val manualNetwork = if (importedKml == null && manholes.isNotEmpty()) DxfKmlImporter.convertManual(manholes, pipes, utmZone.toIntOrNull() ?: 38) else null
             val lon = longitude.toDouble(); val lat = latitude.toDouble()
             require(importedKml != null || manualNetwork != null || (lon in -180.0..180.0 && lat in -90.0..90.0))
             val outputKml = importedKml ?: manualNetwork?.first ?: KmlPointWriter.point("ARKAN reference point", lon, lat)
@@ -610,9 +611,10 @@ private fun ArkanApp() {
 
     if (showGeoDialog) AlertDialog(
         onDismissRequest = { showGeoDialog = false },
-        title = { Text("النقطة المرجعية UTM Zone 38N") },
+        title = { Text("النقطة المرجعية UTM / Zone ${utmZone}N") },
         text = { Column {
-            Text("أدخل إحداثيات الزاوية العليا اليسرى لمساحة الرسم: E = Easting و N = Northing. يفترض التحويل أن محور X يتجه شرقاً ومحور Y على الشاشة يتجه جنوباً.")
+            Text("أدخل إحداثيات الزاوية العليا اليسرى. اختر رقم منطقة UTM الصحيح للمشروع (1 إلى 60). الافتراضي للعراق Zone 38N.")
+            OutlinedTextField(utmZone, { utmZone = it.filter(Char::isDigit).take(2) }, label = { Text("UTM Zone (1–60)") }, singleLine = true)
             OutlinedTextField(referenceEasting, { referenceEasting = it }, label = { Text("Easting (E) بالمتر") }, singleLine = true)
             OutlinedTextField(referenceNorthing, { referenceNorthing = it }, label = { Text("Northing (N) بالمتر") }, singleLine = true)
             Text("يلزم إدخال نقطة مرجعية معروفة؛ المسافات وحدها لا تحدد الموقع الحقيقي.")
@@ -620,7 +622,7 @@ private fun ArkanApp() {
         confirmButton = { TextButton(onClick = {
             val e0 = referenceEasting.toDoubleOrNull()
             val n0 = referenceNorthing.toDoubleOrNull()
-            if (e0 == null || n0 == null || e0 !in 100000.0..900000.0 || n0 !in 0.0..10000000.0) {
+            if (e0 == null || n0 == null || e0 !in 100000.0..900000.0 || n0 !in 0.0..10000000.0 || (utmZone.toIntOrNull() ?: 0) !in 1..60) {
                 status = "أدخل إحداثيات UTM صحيحة."
             } else {
                 manholes = manholes.map { mh ->
@@ -628,7 +630,7 @@ private fun ArkanApp() {
                     mh.copy(easting = e, northing = n, coordinatesKnown = true)
                 }
                 showGeoDialog = false
-                status = "تم ضبط مرجع UTM 38N وتحديث إحداثيات المناهيل."
+                status = "تم ضبط مرجع UTM Zone ${utmZone}N وتحديث إحداثيات المناهيل."
             }
         }) { Text("حفظ المرجع") } },
         dismissButton = { TextButton(onClick = { showGeoDialog = false }) { Text("إلغاء") } }
@@ -948,11 +950,11 @@ private object DxfKmlImporter {
     private data class GeoPoint(val lon: Double, val lat: Double, val alt: Double)
     private data class DxfPosition(val east: Double, val north: Double, val alt: Double)
     private data class DxfLabel(val east: Double, val north: Double, val text: String)
-    fun convertManual(manholes: List<Manhole>, pipes: List<Pipe>): Pair<String, Int> {
+    fun convertManual(manholes: List<Manhole>, pipes: List<Pipe>, zone: Int): Pair<String, Int> {
         require(manholes.isNotEmpty()) { "لا توجد مناهيل للتصدير" }
         val placemarks = StringBuilder()
         manholes.forEach { mh ->
-            val geo = utmToWgs84(mh.easting, mh.northing, mh.altitude)
+            val geo = utmToWgs84(mh.easting, mh.northing, mh.altitude, zone)
             placemarks.append("<Placemark><name>${xmlEscape(mh.id)}</name><Point><coordinates>${fmt(geo.lon)},${fmt(geo.lat)},${fmt(geo.alt)}</coordinates></Point></Placemark>")
         }
         var exportedPipes = 0
@@ -964,8 +966,8 @@ private object DxfKmlImporter {
                 val startDistance = hypot((start.point.x - pipe.a.x).toDouble(), (start.point.y - pipe.a.y).toDouble())
                 val endDistance = hypot((end.point.x - pipe.b.x).toDouble(), (end.point.y - pipe.b.y).toDouble())
                 if (startDistance <= maxSnapPixels && endDistance <= maxSnapPixels) {
-                    val a = utmToWgs84(start.easting, start.northing, start.altitude)
-                    val b = utmToWgs84(end.easting, end.northing, end.altitude)
+                    val a = utmToWgs84(start.easting, start.northing, start.altitude, zone)
+                    val b = utmToWgs84(end.easting, end.northing, end.altitude, zone)
                     val name = xmlEscape("${pipe.layer} - Pipe ${index + 1}")
                     placemarks.append("<Placemark><name>$name</name><Style><LineStyle><color>ff00ffff</color><width>3</width></LineStyle></Style><LineString><tessellate>1</tessellate><coordinates>${fmt(a.lon)},${fmt(a.lat)},${fmt(a.alt)} ${fmt(b.lon)},${fmt(b.lat)},${fmt(b.alt)}</coordinates></LineString></Placemark>")
                     exportedPipes++
@@ -977,7 +979,8 @@ private object DxfKmlImporter {
         return kml to exportedPipes
     }
 
-    fun convert(raw: String): ImportResult {
+    fun convert(raw: String, zone: Int): ImportResult {
+        require(zone in 1..60) { "رقم منطقة UTM يجب أن يكون بين 1 و60." }
         // DXF is a sequence of group-code/value lines. Be tolerant of BOM,
         // CRLF/LF, blank lines and malformed records instead of losing pair alignment.
         val normalized = raw.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n')
@@ -1096,7 +1099,7 @@ private object DxfKmlImporter {
             Manhole(extractedId?.let { "MH-$it" } ?: "MH-%02d".format(Locale.US, index + 1), Offset.Zero, extractedDepth, if (extractedDepth >= 1.70) 0.7318 else 1.10, if (extractedDepth >= 1.70) 0.7318 else 0.70, pos.north, pos.east, pos.alt, coordinatesKnown = false)
         }
         importedManholes.forEach { mh ->
-            val geo = utmToWgs84(mh.easting, mh.northing, mh.altitude)
+            val geo = utmToWgs84(mh.easting, mh.northing, mh.altitude, zone)
             val safeName = xmlEscape(mh.id)
             placemarks.append("<Placemark><name>$safeName</name><Point><coordinates>${fmt(geo.lon)},${fmt(geo.lat)},${fmt(geo.alt)}</coordinates></Point></Placemark>")
         }
@@ -1183,7 +1186,7 @@ private object DxfKmlImporter {
                     layerLengths[layer] = (layerLengths[layer] ?: 0.0) + length
                     importedPaths += ImportedPath(layer, pts.toList())
                     val coords = pts.joinToString(" ") { (east, north) ->
-                        val g = utmToWgs84(east, north, 0.0)
+                        val g = utmToWgs84(east, north, 0.0, zone)
                         "${fmt(g.lon)},${fmt(g.lat)},${fmt(g.alt)}"
                     }
                     pipeCount++
@@ -1215,7 +1218,8 @@ private object DxfKmlImporter {
     }
     private fun xmlEscape(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
     private fun fmt(v: Double) = String.format(Locale.US, "%.8f", v)
-    private fun utmToWgs84(easting: Double, northing: Double, altitude: Double): GeoPoint {
+    private fun utmToWgs84(easting: Double, northing: Double, altitude: Double, zone: Int): GeoPoint {
+        require(zone in 1..60) { "رقم منطقة UTM غير صالح." }
         val a = 6378137.0
         val ecc = 0.00669438
         val k0 = 0.9996
@@ -1243,7 +1247,7 @@ private object DxfKmlImporter {
         val q5 = d
         val q6 = (1 + 2 * t1 + c1) * d.pow(3) / 6
         val q7 = (5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * ep2 + 24 * t1 * t1) * d.pow(5) / 120
-        val lon = Math.toRadians(45.0) + (q5 - q6 + q7) / kotlin.math.cos(fp)
+        val lon = Math.toRadians(zone * 6.0 - 183.0) + (q5 - q6 + q7) / kotlin.math.cos(fp)
         return GeoPoint(Math.toDegrees(lon), Math.toDegrees(lat), altitude)
     }
     private fun Double.pow(n: Int): Double = this.pow(n.toDouble())
