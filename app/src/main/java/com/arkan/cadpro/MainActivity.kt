@@ -430,25 +430,39 @@ private fun ArkanApp() {
 
     val dxfSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/dxf")) { uri: Uri? ->
         if (uri != null) try {
-            val e0 = referenceEasting.toDoubleOrNull() ?: error("أدخل Easting لنقطة مرجعية UTM أولاً.")
-            val n0 = referenceNorthing.toDoubleOrNull() ?: error("أدخل Northing لنقطة مرجعية UTM أولاً.")
-            require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) { "إحداثيات UTM غير صحيحة." }
-            val dxf = buildArkanDxf(pipes, effectiveManholes, cadEntities, e0, n0)
-            context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
-            status = "تم تصدير DXF بإحداثيات UTM Zone ${utmZone}N. تحقق من صحة النقطة المرجعية."
+            val e0 = referenceEasting.toDoubleOrNull() ?: 0.0
+            val n0 = referenceNorthing.toDoubleOrNull() ?: 0.0
+            val hasImportedUtm = importedKml != null && (importedPaths.isNotEmpty() || importedManholes.isNotEmpty())
+            if (hasImportedUtm) {
+                val dxf = buildArkanDxf(pipes, effectiveManholes, cadEntities, 0.0, 0.0, importedPaths, true)
+                context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
+                status = "تم تصدير DXF مع الحفاظ على إحداثيات UTM الأصلية للمخطط المستورد."
+            } else {
+                require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) { "أدخل نقطة مرجعية UTM صحيحة قبل التصدير." }
+                val dxf = buildArkanDxf(pipes, effectiveManholes, cadEntities, e0, n0)
+                context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
+                status = "تم تصدير DXF بإحداثيات UTM Zone ${utmZone}N."
+            }
         } catch (e: Exception) { status = "تعذر تصدير DXF: ${e.message}" }
     }
 
     val dwgSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/acad")) { uri: Uri? ->
         if (uri != null) try {
-            // Save DWG in local drawing coordinates when no UTM reference has been configured.
             val e0 = referenceEasting.toDoubleOrNull() ?: 0.0
             val n0 = referenceNorthing.toDoubleOrNull() ?: 0.0
-            require(e0 == 0.0 && n0 == 0.0 || (e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0)) { "إحداثيات UTM غير صحيحة." }
-            val dxfText = buildArkanDxf(pipes, effectiveManholes, cadEntities, e0, n0)
+            val hasImportedUtm = importedKml != null && (importedPaths.isNotEmpty() || importedManholes.isNotEmpty())
+            val dxfText = if (hasImportedUtm) {
+                buildArkanDxf(pipes, effectiveManholes, cadEntities, 0.0, 0.0, importedPaths, true)
+            } else {
+                require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) {
+                    "أدخل إحداثيات نقطة مرجعية UTM أولاً؛ لا يمكن اعتبار الإحداثيات المحلية إحداثيات حقيقية."
+                }
+                buildArkanDxf(pipes, effectiveManholes, cadEntities, e0, n0)
+            }
             val dwgFile = LibreDwgRunner.convertDxfToDwg(context, dxfText)
             context.contentResolver.openOutputStream(uri)?.use { output -> dwgFile.inputStream().use { it.copyTo(output) } }
-            status = "تم إنشاء ملف DWG. افتحه في AutoCAD للتحقق من توافق الرسم."
+            status = if (hasImportedUtm) "تم حفظ DWG مع الحفاظ على إحداثيات UTM الأصلية للمخطط المستورد."
+                else "تم إنشاء DWG بإحداثيات UTM Zone ${utmZone}N."
         } catch (e: Exception) { status = "تعذر تصدير DWG: " + e.message }
     }
 
@@ -1445,7 +1459,15 @@ private fun ArkanApp() {
 }
 
 
-private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, cadEntities: List<CadEntity>, originEasting: Double, originNorthing: Double): String {
+private fun buildArkanDxf(
+    pipes: List<Pipe>,
+    manholes: List<Manhole>,
+    cadEntities: List<CadEntity>,
+    originEasting: Double,
+    originNorthing: Double,
+    importedPaths: List<ImportedPath> = emptyList(),
+    importedCoordinatesAreUtm: Boolean = false
+): String {
     val out = StringBuilder()
     fun pair(code: Int, value: Any) { out.append(code).append("\r\n").append(value).append("\r\n") }
     fun entity(type: String, layer: String) { pair(0, type); pair(8, layer) }
@@ -1453,12 +1475,39 @@ private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, cadEntitie
     pair(9, "$" + "INSUNITS"); pair(70, 6)
     pair(9, "$" + "MEASUREMENT"); pair(70, 1)
     pair(0, "ENDSEC"); pair(0, "SECTION"); pair(2, "ENTITIES")
-    pipes.forEach { pipe ->
-        entity("LINE", pipe.layer.ifBlank { "SEWER" })
-        val (ax, ay) = localToUtm(pipe.a, originEasting, originNorthing)
-        val (bx, by) = localToUtm(pipe.b, originEasting, originNorthing)
-        pair(10, ax); pair(20, ay); pair(30, 0)
-        pair(11, bx); pair(21, by); pair(31, 0)
+    if (importedCoordinatesAreUtm) {
+        importedPaths.forEach { path ->
+            if (path.points.size >= 2) {
+                entity("LWPOLYLINE", path.layer.ifBlank { "SEWER" })
+                pair(90, path.points.size); pair(70, 0)
+                path.points.forEach { (easting, northing) -> pair(10, easting); pair(20, northing) }
+            }
+        }
+        manholes.forEach { mh ->
+            val x = mh.easting
+            val y = mh.northing
+            if (mh.isCircular) {
+                entity("CIRCLE", "MANHOLES")
+                pair(10, x); pair(20, y); pair(30, mh.altitude); pair(40, 0.7318 / 2.0)
+            } else {
+                val hx = 0.70 / 2.0; val hy = 1.10 / 2.0
+                entity("LWPOLYLINE", "MANHOLES")
+                pair(90, 4); pair(70, 1)
+                listOf(x-hx to y-hy, x+hx to y-hy, x+hx to y+hy, x-hx to y+hy).forEach { (vx, vy) ->
+                    pair(10, vx); pair(20, vy)
+                }
+            }
+            entity("TEXT", "MANHOLE-LABELS")
+            pair(10, x); pair(20, y + 0.45); pair(30, mh.altitude); pair(40, 0.20); pair(1, mh.id)
+        }
+    } else {
+        pipes.forEach { pipe ->
+            entity("LINE", pipe.layer.ifBlank { "SEWER" })
+            val (ax, ay) = localToUtm(pipe.a, originEasting, originNorthing)
+            val (bx, by) = localToUtm(pipe.b, originEasting, originNorthing)
+            pair(10, ax); pair(20, ay); pair(30, 0)
+            pair(11, bx); pair(21, by); pair(31, 0)
+        }
     }
     cadEntities.forEach { cad ->
         val pts = when (cad.type) {
@@ -1491,7 +1540,7 @@ private fun buildArkanDxf(pipes: List<Pipe>, manholes: List<Manhole>, cadEntitie
             }
         }
     }
-    manholes.forEach { mh ->
+    if (!importedCoordinatesAreUtm) manholes.forEach { mh ->
         val (x, y) = localToUtm(mh.point, originEasting, originNorthing)
         if (mh.isCircular) {
             entity("CIRCLE", "MANHOLES")
