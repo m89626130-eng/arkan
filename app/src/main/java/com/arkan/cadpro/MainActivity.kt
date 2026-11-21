@@ -441,9 +441,10 @@ private fun ArkanApp() {
 
     val dwgSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/acad")) { uri: Uri? ->
         if (uri != null) try {
-            val e0 = referenceEasting.toDoubleOrNull() ?: error("أدخل Easting لنقطة مرجعية UTM أولاً.")
-            val n0 = referenceNorthing.toDoubleOrNull() ?: error("أدخل Northing لنقطة مرجعية UTM أولاً.")
-            require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) { "إحداثيات UTM غير صحيحة." }
+            // Save DWG in local drawing coordinates when no UTM reference has been configured.
+            val e0 = referenceEasting.toDoubleOrNull() ?: 0.0
+            val n0 = referenceNorthing.toDoubleOrNull() ?: 0.0
+            require(e0 == 0.0 && n0 == 0.0 || (e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0)) { "إحداثيات UTM غير صحيحة." }
             val dxfText = buildArkanDxf(pipes, effectiveManholes, cadEntities, e0, n0)
             val dwgFile = LibreDwgRunner.convertDxfToDwg(context, dxfText)
             context.contentResolver.openOutputStream(uri)?.use { output -> dwgFile.inputStream().use { it.copyTo(output) } }
@@ -487,9 +488,8 @@ private fun ArkanApp() {
                         if (cadRedo.isNotEmpty()) { cadEntities = cadEntities + cadRedo.last(); cadRedo = cadRedo.dropLast(1); status = "Redo: تمت إعادة آخر خطوة." }
                         else status = "لا توجد خطوة لإعادتها."
                     })
-                    CadPaletteButton("▣", "SAVE", {
-                        if (referenceEasting.isBlank() || referenceNorthing.isBlank()) { showGeoDialog = true; status = "أدخل إحداثيات UTM المرجعية أولاً." }
-                        else dxfSaver.launch("ARKAN_DRAWING.dxf")
+                    CadPaletteButton("▣", "SAVE DWG", {
+                        dwgSaver.launch("ARKAN_DRAWING.dwg")
                     })
                 }
             }
