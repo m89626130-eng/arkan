@@ -214,6 +214,8 @@ private fun ArkanApp() {
     var viewZoom by remember { mutableStateOf(1f) }
     var viewPanX by remember { mutableStateOf(0f) }
     var viewPanY by remember { mutableStateOf(0f) }
+    var showCoordinateReadout by remember { mutableStateOf(false) }
+    var lastCoordinateTap by remember { mutableStateOf<Offset?>(null) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadCornerDistance by remember { mutableStateOf("0.25") }
     var cadScaleFactor by remember { mutableStateOf("2.0") }
@@ -611,6 +613,7 @@ private fun ArkanApp() {
                         status = "تم إنهاء POLYLINE."
                     }
                 }, onTap = { tap ->
+                    lastCoordinateTap = tap
                     when {
                         mode == "MEASURE_DISTANCE" -> {
                             if (measureDraft.isEmpty()) { measureDraft = listOf(tap); status = "حدد نقطة النهاية لقياس DISTANCE." }
@@ -1152,6 +1155,58 @@ private fun ArkanApp() {
                 }
             }
             Box(Modifier.fillMaxSize()) {
+                Column(
+                    Modifier.align(androidx.compose.ui.Alignment.TopStart).padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showCoordinateReadout = !showCoordinateReadout },
+                        shape = RoundedCornerShape(9.dp),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color(0xFF18B8C2),
+                            contentColor = Color.White
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF72F5F5))
+                    ) { Text("X, Y", fontSize = 20.sp) }
+                    OutlinedButton(
+                        onClick = { showCoordinateReadout = true; status = "المس نقطة في الرسم لعرض إحداثياتها." },
+                        modifier = Modifier.size(44.dp),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color(0xFF18B8C2),
+                            contentColor = Color.White
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(2.dp, Color.White)
+                    ) { Text("◎", fontSize = 25.sp, color = Color.White) }
+                    if (showCoordinateReadout) {
+                        val p = lastCoordinateTap
+                        val x = p?.x?.div(PX_PER_METER)
+                        val y = p?.y?.let { -it / PX_PER_METER }
+                        val e0 = referenceEasting.toDoubleOrNull()
+                        val n0 = referenceNorthing.toDoubleOrNull()
+                        Surface(
+                            color = Color(0xEE101820),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF18B8C2))
+                        ) {
+                            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                Text("COORDINATES", color = Color(0xFF72F5F5), fontSize = 11.sp)
+                                if (p == null) {
+                                    Text("المس نقطة في مساحة الرسم", color = Color.White, fontSize = 12.sp)
+                                } else {
+                                    Text("X: %.3f m".format(Locale.US, x), color = Color.White, fontSize = 13.sp)
+                                    Text("Y: %.3f m".format(Locale.US, y), color = Color.White, fontSize = 13.sp)
+                                    if (e0 != null && n0 != null) {
+                                        Text("E: %.3f".format(Locale.US, e0 + x!!), color = Color(0xFF72F5F5), fontSize = 12.sp)
+                                        Text("N: %.3f".format(Locale.US, n0 + y!!), color = Color(0xFF72F5F5), fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Row(
                     Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
