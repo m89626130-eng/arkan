@@ -167,6 +167,13 @@ private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, s
 
 @Composable
 private fun ArkanApp() {
+    val context = LocalContext.current
+    var whiteCanvas by remember { mutableStateOf(context.getSharedPreferences("arkan_settings", android.content.Context.MODE_PRIVATE).getBoolean("white_canvas", false)) }
+    var showDisplaySettings by remember { mutableStateOf(false) }
+    LaunchedEffect(whiteCanvas) {
+        context.getSharedPreferences("arkan_settings", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("white_canvas", whiteCanvas).apply()
+    }
     var pipes by remember { mutableStateOf(listOf<Pipe>()) }
     var cadEntities by remember { mutableStateOf(listOf<CadEntity>()) }
     var cadLayers by remember { mutableStateOf(listOf(CadLayer("0", 0xFFFFFFFF))) }
@@ -235,9 +242,16 @@ private fun ArkanApp() {
     var mhGroundLevel by remember { mutableStateOf("") }
     var mhInvertLevel by remember { mutableStateOf("") }
     var pendingManhole by remember { mutableStateOf<Manhole?>(null) }
-    val context = LocalContext.current
-    fun cadLayerColor(name: String): Color = Color(cadLayers.firstOrNull { it.name == name }?.color ?: 0xFFFFFFFF)
-    fun cadEntityColor(entity: CadEntity): Color = Color(entity.color ?: (cadLayers.firstOrNull { it.name == entity.layer }?.color ?: 0xFFFFFFFF))
+    fun cadLayerColor(name: String): Color {
+        val layer = cadLayers.firstOrNull { it.name == name }
+        val stored = layer?.color ?: 0xFFFFFFFF
+        return if (whiteCanvas && name == "0" && stored == 0xFFFFFFFF) Color.Black else Color(stored)
+    }
+    fun cadEntityColor(entity: CadEntity): Color {
+        val layer = cadLayers.firstOrNull { it.name == entity.layer }
+        val stored = entity.color ?: (layer?.color ?: 0xFFFFFFFF)
+        return if (whiteCanvas && entity.layer == "0" && entity.color == null && stored == 0xFFFFFFFF) Color.Black else Color(stored)
+    }
     val visibleCadEntities = cadEntities.filter { entity -> cadLayers.firstOrNull { it.name == entity.layer }?.visible != false }
 
     fun finishPendingCadDraft() {
@@ -512,6 +526,7 @@ private fun ArkanApp() {
                     CadPaletteButton("▣", "SAVE DWG", {
                         dwgSaver.launch("ARKAN_DRAWING.dwg")
                     })
+                    CadPaletteButton("⚙", "SETTINGS", { showDisplaySettings = true })
                 }
             }
             Spacer(Modifier.height(5.dp))
@@ -525,7 +540,7 @@ private fun ArkanApp() {
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp)) {
-            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(Color.Black).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
+            Canvas(Modifier.fillMaxSize().graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.25f, 8f); viewPanX += pan.x; viewPanY += pan.y } }.background(if (whiteCanvas) Color.White else Color.Black).pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
                         cadRedo = emptyList()
@@ -1040,8 +1055,9 @@ private fun ArkanApp() {
                 }
                 pipes.forEach { pipe ->
                     drawLine(pipeLayerColor(pipe.layer), pipe.a, pipe.b, 5f)
-                    drawCircle(Color.White, 4f, pipe.a)
-                    drawCircle(Color.White, 4f, pipe.b)
+                    val endpointColor = if (whiteCanvas) Color.Black else Color.White
+                    drawCircle(endpointColor, 4f, pipe.a)
+                    drawCircle(endpointColor, 4f, pipe.b)
                     connectedManholes(pipe, manholes)?.let { (startMh, endMh) ->
                         val downstream = if (startMh.invertLevel!! > endMh.invertLevel!!) pipe.b else pipe.a
                         val upstream = if (downstream == pipe.b) pipe.a else pipe.b
@@ -1297,6 +1313,25 @@ private fun ArkanApp() {
             }
         }
     }
+
+    if (showDisplaySettings) AlertDialog(
+        onDismissRequest = { showDisplaySettings = false },
+        title = { Text("إعدادات مساحة الرسم") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    RadioButton(selected = !whiteCanvas, onClick = { whiteCanvas = false })
+                    Text("خلفية سوداء", color = Color.White)
+                }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    RadioButton(selected = whiteCanvas, onClick = { whiteCanvas = true })
+                    Text("خلفية بيضاء", color = Color.White)
+                }
+                Text("القوائم والأشرطة تبقى داكنة دائماً، ويتم حفظ اختيارك حتى بعد إغلاق التطبيق.", color = Color.LightGray, fontSize = 11.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = { showDisplaySettings = false }) { Text("تم") } }
+    )
 
     if (showSlopeDialog) AlertDialog(
         onDismissRequest = { showSlopeDialog = false },
