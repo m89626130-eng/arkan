@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
@@ -21,6 +22,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.toArgb
@@ -216,6 +219,8 @@ private fun ArkanApp() {
     var viewPanY by remember { mutableStateOf(0f) }
     var showCoordinateReadout by remember { mutableStateOf(false) }
     var lastCoordinateTap by remember { mutableStateOf<Offset?>(null) }
+    var coordinateCursorActive by remember { mutableStateOf(false) }
+    var coordinateCursorPoint by remember { mutableStateOf<Offset?>(null) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadCornerDistance by remember { mutableStateOf("0.25") }
     var cadScaleFactor by remember { mutableStateOf("2.0") }
@@ -596,21 +601,27 @@ private fun ArkanApp() {
                 CadPaletteButton("⇧", "OPEN DWG", { dwgPicker.launch(arrayOf("*/*")) })
                 CadPaletteButton("⌫", "CLEAR", { showClearConfirm = true })
                 CadPaletteButton("⌖", "X,Y", {
-                    showCoordinateReadout = !showCoordinateReadout
-                    status = if (showCoordinateReadout) {
-                        val p = lastCoordinateTap
-                        if (p == null) "المس نقطة في الرسم لعرض X,Y."
-                        else {
+                    if (!coordinateCursorActive) {
+                        coordinateCursorActive = true
+                        showCoordinateReadout = true
+                        coordinateCursorPoint = lastCoordinateTap ?: Offset(300f, 300f)
+                        status = "حرّك سهم X,Y إلى الركن أو بداية/نهاية الخط؛ سيظهر + عند نقطة الالتقاط."
+                    } else {
+                        val p = coordinateCursorPoint
+                        if (p != null) {
                             val x = p.x / PX_PER_METER
                             val y = -p.y / PX_PER_METER
                             val e0 = referenceEasting.toDoubleOrNull()
                             val n0 = referenceNorthing.toDoubleOrNull()
-                            if (e0 != null && n0 != null)
+                            status = if (e0 != null && n0 != null)
                                 "X: %.3f | Y: %.3f | E: %.3f | N: %.3f".format(Locale.US,x,y,e0+x,n0+y)
                             else "X: %.3f m | Y: %.3f m".format(Locale.US,x,y)
+                            lastCoordinateTap = p
                         }
-                    } else "تم إغلاق عرض الإحداثيات."
-                }, selected = showCoordinateReadout)
+                        coordinateCursorActive = false
+                        showCoordinateReadout = false
+                    }
+                }, selected = coordinateCursorActive)
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp)) {
@@ -1179,6 +1190,36 @@ private fun ArkanApp() {
                 }
             }
             Box(Modifier.fillMaxSize()) {
+                if (coordinateCursorActive && coordinateCursorPoint != null) {
+                    val density = context.resources.displayMetrics.density
+                    val cursor = coordinateCursorPoint!!
+                    val cursorScreenX = cursor.x * viewZoom + viewPanX
+                    val cursorScreenY = cursor.y * viewZoom + viewPanY
+                    Box(
+                        Modifier.offset { IntOffset((cursorScreenX - 18f * density).roundToInt(), (cursorScreenY - 18f * density).roundToInt()) }
+                            .size(36.dp)
+                            .background(Color(0x3320E6D2), RoundedCornerShape(18.dp))
+                            .pointerInput(coordinateCursorActive, viewZoom, cadEntities) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    val moved = Offset(cursor.x + dragAmount.x / viewZoom, cursor.y + dragAmount.y / viewZoom)
+                                    val snapPoints = cadEntities.flatMap { entity ->
+                                        if (entity.type == "RECTANGLE" && entity.points.size >= 2) {
+                                            val a = entity.points[0]; val b = entity.points[1]
+                                            listOf(a, Offset(b.x,a.y), b, Offset(a.x,b.y))
+                                        } else entity.points
+                                    }
+                                    val nearest = snapPoints.minByOrNull { hypot((it.x-moved.x).toDouble(), (it.y-moved.y).toDouble()) }
+                                    val snapped = if (nearest != null && hypot((nearest.x-moved.x).toDouble(), (nearest.y-moved.y).toDouble()) * viewZoom <= 22f * density) nearest else moved
+                                    coordinateCursorPoint = snapped
+                                    if (snapped != moved) status = "OSNAP + | تم التقاط الركن/نقطة الخط."
+                                }
+                            },
+                        contentAlignment = androidx.compose.ui.Alignment.Center
+                    ) {
+                        Text("＋", color = Color(0xFF20E6D2), fontSize = 30.sp, lineHeight = 32.sp)
+                    }
+                }
                 Row(
                     Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
