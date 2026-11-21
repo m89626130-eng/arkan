@@ -1155,7 +1155,24 @@ private fun ArkanApp() {
                 commandItems.forEach { (tool, icon) ->
                     CadPaletteButton(icon, tool, {
                         when (selectedCadTab) {
-                            "DRAW" -> { mode = tool; cadDraft = emptyList(); pipeStart = null; status = "أداة " + tool + ": حدد نقاط الرسم." }
+                            "DRAW" -> {
+                                // Preserve an in-progress polyline before switching to another draw tool.
+                                if (mode == "POLYLINE" && tool != "POLYLINE") {
+                                    if (cadDraft.size >= 2) {
+                                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
+                                        cadRedo = emptyList()
+                                        status = "تم حفظ POLYLINE تلقائياً قبل الانتقال إلى " + tool
+                                    } else if (cadDraft.isNotEmpty()) {
+                                        status = "لم يكتمل POLYLINE؛ يلزم نقطتان على الأقل."
+                                    }
+                                    cadDraft = emptyList()
+                                } else {
+                                    cadDraft = emptyList()
+                                }
+                                mode = tool
+                                pipeStart = null
+                                status = if (mode == "POLYLINE" && cadDraft.size >= 2) status else "أداة " + tool + ": حدد نقاط الرسم."
+                            }
                             "EDIT" -> {
                                 finishPendingCadDraft(); mode = tool; cadEditSelection = null; cadDraft = emptyList()
                                 status = when (tool) {
