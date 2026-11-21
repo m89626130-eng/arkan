@@ -430,39 +430,46 @@ private fun ArkanApp() {
 
     val dxfSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/dxf")) { uri: Uri? ->
         if (uri != null) try {
-            val e0 = referenceEasting.toDoubleOrNull() ?: 0.0
-            val n0 = referenceNorthing.toDoubleOrNull() ?: 0.0
-            val hasImportedUtm = importedKml != null && (importedPaths.isNotEmpty() || importedManholes.isNotEmpty())
-            if (hasImportedUtm) {
-                val dxf = buildArkanDxf(pipes, effectiveManholes, cadEntities, 0.0, 0.0, importedPaths, true)
-                context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
-                status = "تم تصدير DXF مع الحفاظ على إحداثيات UTM الأصلية للمخطط المستورد."
+            val e0 = referenceEasting.toDoubleOrNull()
+            val n0 = referenceNorthing.toDoubleOrNull()
+            val hasImportedGeometry = importedKml != null && (importedPaths.isNotEmpty() || importedManholes.isNotEmpty())
+            val hasUtmReference = e0 != null && n0 != null &&
+                e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0
+            val dxf = if (hasImportedGeometry) {
+                buildArkanDxf(pipes, effectiveManholes, cadEntities, 0.0, 0.0, importedPaths, true)
             } else {
-                require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) { "أدخل نقطة مرجعية UTM صحيحة قبل التصدير." }
-                val dxf = buildArkanDxf(pipes, effectiveManholes, cadEntities, e0, n0)
-                context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
-                status = "تم تصدير DXF بإحداثيات UTM Zone ${utmZone}N."
+                buildArkanDxf(pipes, effectiveManholes, cadEntities,
+                    if (hasUtmReference) e0!! else 0.0,
+                    if (hasUtmReference) n0!! else 0.0)
             }
+            context.contentResolver.openOutputStream(uri)?.use { it.write(dxf.toByteArray(Charsets.UTF_8)) }
+            status = when {
+                hasImportedGeometry -> "تم تصدير DXF مع الحفاظ على إحداثيات الملف الأصلي كما هي."
+                hasUtmReference -> "تم تصدير DXF بإحداثيات UTM Zone ${utmZone}N."
+                else -> "تم تصدير DXF بالإحداثيات المحلية للرسم."
         } catch (e: Exception) { status = "تعذر تصدير DXF: ${e.message}" }
     }
 
     val dwgSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/acad")) { uri: Uri? ->
         if (uri != null) try {
-            val e0 = referenceEasting.toDoubleOrNull() ?: 0.0
-            val n0 = referenceNorthing.toDoubleOrNull() ?: 0.0
-            val hasImportedUtm = importedKml != null && (importedPaths.isNotEmpty() || importedManholes.isNotEmpty())
-            val dxfText = if (hasImportedUtm) {
+            val e0 = referenceEasting.toDoubleOrNull()
+            val n0 = referenceNorthing.toDoubleOrNull()
+            val hasImportedGeometry = importedKml != null && (importedPaths.isNotEmpty() || importedManholes.isNotEmpty())
+            val hasUtmReference = e0 != null && n0 != null &&
+                e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0
+            val dxfText = if (hasImportedGeometry) {
                 buildArkanDxf(pipes, effectiveManholes, cadEntities, 0.0, 0.0, importedPaths, true)
             } else {
-                require(e0 in 100000.0..900000.0 && n0 in 0.0..10000000.0) {
-                    "أدخل إحداثيات نقطة مرجعية UTM أولاً؛ لا يمكن اعتبار الإحداثيات المحلية إحداثيات حقيقية."
-                }
-                buildArkanDxf(pipes, effectiveManholes, cadEntities, e0, n0)
+                buildArkanDxf(pipes, effectiveManholes, cadEntities,
+                    if (hasUtmReference) e0!! else 0.0,
+                    if (hasUtmReference) n0!! else 0.0)
             }
             val dwgFile = LibreDwgRunner.convertDxfToDwg(context, dxfText)
             context.contentResolver.openOutputStream(uri)?.use { output -> dwgFile.inputStream().use { it.copyTo(output) } }
-            status = if (hasImportedUtm) "تم حفظ DWG مع الحفاظ على إحداثيات UTM الأصلية للمخطط المستورد."
-                else "تم إنشاء DWG بإحداثيات UTM Zone ${utmZone}N."
+            status = when {
+                hasImportedGeometry -> "تم حفظ DWG مع الحفاظ على إحداثيات الملف الأصلي كما هي."
+                hasUtmReference -> "تم إنشاء DWG بإحداثيات UTM Zone ${utmZone}N."
+                else -> "تم إنشاء DWG بالإحداثيات المحلية للرسم."
         } catch (e: Exception) { status = "تعذر تصدير DWG: " + e.message }
     }
 
