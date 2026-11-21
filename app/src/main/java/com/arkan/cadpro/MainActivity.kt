@@ -461,6 +461,7 @@ private fun ArkanApp() {
                 hasImportedGeometry -> "تم تصدير DXF مع الحفاظ على إحداثيات الملف الأصلي كما هي."
                 hasUtmReference -> "تم تصدير DXF بإحداثيات UTM Zone ${utmZone}N."
                 else -> "تم تصدير DXF بالإحداثيات المحلية للرسم."
+            }
         } catch (e: Exception) { status = "تعذر تصدير DXF: ${e.message}" }
     }
 
@@ -484,6 +485,7 @@ private fun ArkanApp() {
                 hasImportedGeometry -> "تم حفظ DWG مع الحفاظ على إحداثيات الملف الأصلي كما هي."
                 hasUtmReference -> "تم إنشاء DWG بإحداثيات UTM Zone ${utmZone}N."
                 else -> "تم إنشاء DWG بالإحداثيات المحلية للرسم."
+            }
         } catch (e: Exception) { status = "تعذر تصدير DWG: " + e.message }
     }
 
