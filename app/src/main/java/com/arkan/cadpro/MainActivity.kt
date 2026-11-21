@@ -1193,6 +1193,7 @@ private fun ArkanApp() {
                 if (coordinateCursorActive && coordinateCursorPoint != null) {
                     val density = context.resources.displayMetrics.density
                     val cursor = coordinateCursorPoint!!
+                    val currentCursor by rememberUpdatedState(coordinateCursorPoint ?: cursor)
                     val cursorScreenX = cursor.x * viewZoom + viewPanX
                     val cursorScreenY = cursor.y * viewZoom + viewPanY
                     Box(
@@ -1202,14 +1203,15 @@ private fun ArkanApp() {
                             .pointerInput(coordinateCursorActive, viewZoom, cadEntities) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
-                                    val moved = Offset(cursor.x + dragAmount.x / viewZoom, cursor.y + dragAmount.y / viewZoom)
+                                    val moved = Offset(currentCursor.x + dragAmount.x / viewZoom, currentCursor.y + dragAmount.y / viewZoom)
                                     val snapPoints = cadEntities.flatMap { entity ->
                                         if (entity.type == "RECTANGLE" && entity.points.size >= 2) {
                                             val a = entity.points[0]; val b = entity.points[1]
                                             listOf(a, Offset(b.x,a.y), b, Offset(a.x,b.y))
                                         } else entity.points
                                     }
-                                    val nearest = snapPoints.minByOrNull { hypot((it.x-moved.x).toDouble(), (it.y-moved.y).toDouble()) }
+                                    val allSnapPoints = snapPoints + pipes.flatMap { listOf(it.a, it.b) } + manholes.map { it.point }
+                                    val nearest = allSnapPoints.minByOrNull { hypot((it.x-moved.x).toDouble(), (it.y-moved.y).toDouble()) }
                                     val snapped = if (nearest != null && hypot((nearest.x-moved.x).toDouble(), (nearest.y-moved.y).toDouble()) * viewZoom <= 22f * density) nearest else moved
                                     coordinateCursorPoint = snapped
                                     if (snapped != moved) status = "OSNAP + | تم التقاط الركن/نقطة الخط."
