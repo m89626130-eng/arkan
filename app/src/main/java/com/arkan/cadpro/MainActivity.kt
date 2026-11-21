@@ -595,6 +595,22 @@ private fun ArkanApp() {
                 CadPaletteButton("⇧", "OPEN DXF", { dxfPicker.launch(arrayOf("*/*")) })
                 CadPaletteButton("⇧", "OPEN DWG", { dwgPicker.launch(arrayOf("*/*")) })
                 CadPaletteButton("⌫", "CLEAR", { showClearConfirm = true })
+                CadPaletteButton("⌖", "X,Y", {
+                    showCoordinateReadout = !showCoordinateReadout
+                    status = if (showCoordinateReadout) {
+                        val p = lastCoordinateTap
+                        if (p == null) "المس نقطة في الرسم لعرض X,Y."
+                        else {
+                            val x = p.x / PX_PER_METER
+                            val y = -p.y / PX_PER_METER
+                            val e0 = referenceEasting.toDoubleOrNull()
+                            val n0 = referenceNorthing.toDoubleOrNull()
+                            if (e0 != null && n0 != null)
+                                "X: %.3f | Y: %.3f | E: %.3f | N: %.3f".format(Locale.US,x,y,e0+x,n0+y)
+                            else "X: %.3f m | Y: %.3f m".format(Locale.US,x,y)
+                        }
+                    } else "تم إغلاق عرض الإحداثيات."
+                }, selected = showCoordinateReadout)
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp)) {
@@ -614,6 +630,14 @@ private fun ArkanApp() {
                     }
                 }, onTap = { tap ->
                     lastCoordinateTap = tap
+                    if (showCoordinateReadout) {
+                        val x = tap.x / PX_PER_METER
+                        val y = -tap.y / PX_PER_METER
+                        val e0 = referenceEasting.toDoubleOrNull()
+                        val n0 = referenceNorthing.toDoubleOrNull()
+                        status = if (e0 != null && n0 != null) "X: %.3f | Y: %.3f | E: %.3f | N: %.3f".format(Locale.US,x,y,e0+x,n0+y)
+                            else "X: %.3f m | Y: %.3f m".format(Locale.US,x,y)
+                    }
                     when {
                         mode == "MEASURE_DISTANCE" -> {
                             if (measureDraft.isEmpty()) { measureDraft = listOf(tap); status = "حدد نقطة النهاية لقياس DISTANCE." }
@@ -1155,58 +1179,6 @@ private fun ArkanApp() {
                 }
             }
             Box(Modifier.fillMaxSize()) {
-                Column(
-                    Modifier.align(androidx.compose.ui.Alignment.TopStart).padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { showCoordinateReadout = !showCoordinateReadout },
-                        shape = RoundedCornerShape(9.dp),
-                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color(0xFF18B8C2),
-                            contentColor = Color.White
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF72F5F5))
-                    ) { Text("X, Y", fontSize = 20.sp) }
-                    OutlinedButton(
-                        onClick = { showCoordinateReadout = true; status = "المس نقطة في الرسم لعرض إحداثياتها." },
-                        modifier = Modifier.size(44.dp),
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        contentPadding = PaddingValues(0.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color(0xFF18B8C2),
-                            contentColor = Color.White
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(2.dp, Color.White)
-                    ) { Text("◎", fontSize = 25.sp, color = Color.White) }
-                    if (showCoordinateReadout) {
-                        val p = lastCoordinateTap
-                        val x = p?.x?.div(PX_PER_METER)
-                        val y = p?.y?.let { -it / PX_PER_METER }
-                        val e0 = referenceEasting.toDoubleOrNull()
-                        val n0 = referenceNorthing.toDoubleOrNull()
-                        Surface(
-                            color = Color(0xEE101820),
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF18B8C2))
-                        ) {
-                            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                                Text("COORDINATES", color = Color(0xFF72F5F5), fontSize = 11.sp)
-                                if (p == null) {
-                                    Text("المس نقطة في مساحة الرسم", color = Color.White, fontSize = 12.sp)
-                                } else {
-                                    Text("X: %.3f m".format(Locale.US, x), color = Color.White, fontSize = 13.sp)
-                                    Text("Y: %.3f m".format(Locale.US, y), color = Color.White, fontSize = 13.sp)
-                                    if (e0 != null && n0 != null) {
-                                        Text("E: %.3f".format(Locale.US, e0 + x!!), color = Color(0xFF72F5F5), fontSize = 12.sp)
-                                        Text("N: %.3f".format(Locale.US, n0 + y!!), color = Color(0xFF72F5F5), fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
                 Row(
                     Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
