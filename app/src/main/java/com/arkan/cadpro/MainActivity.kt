@@ -1086,6 +1086,19 @@ private fun ArkanApp() {
                     }
                 }
             }
+            Box(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CadPaletteButton("−", "ZOOM OUT", {
+                        viewZoom = (viewZoom / 1.25f).coerceIn(0.25f, 32f)
+                    })
+                    CadPaletteButton("＋", "ZOOM IN", {
+                        viewZoom = (viewZoom * 1.25f).coerceIn(0.25f, 32f)
+                    })
+                }
+            }
             }
             Spacer(Modifier.height(6.dp))
 
