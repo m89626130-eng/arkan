@@ -1086,10 +1086,6 @@ private fun ArkanApp() {
                     }
                 }
             }
-            Column(Modifier.align(androidx.compose.ui.Alignment.CenterEnd).padding(end = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { viewZoom = (viewZoom * 1.25f).coerceAtMost(8f); status = "تكبير: ${(viewZoom * 100).toInt()}%" }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(46.dp)) { Text("+", fontSize = 25.sp) }
-                OutlinedButton(onClick = { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f); status = "تصغير: ${(viewZoom * 100).toInt()}%" }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(46.dp)) { Text("−", fontSize = 25.sp) }
-            }
             }
             Spacer(Modifier.height(6.dp))
 
