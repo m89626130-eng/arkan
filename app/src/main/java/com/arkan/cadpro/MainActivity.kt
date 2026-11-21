@@ -166,6 +166,23 @@ private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, s
 }
 
 @Composable
+private fun ZoomCircleButton(symbol: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.size(34.dp),
+        shape = androidx.compose.foundation.shape.CircleShape,
+        contentPadding = PaddingValues(0.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = Color(0xFF252B31),
+            contentColor = Color(0xFF59D7E5)
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A444C))
+    ) {
+        Text(symbol, fontSize = 19.sp, lineHeight = 20.sp, color = Color(0xFF59D7E5))
+    }
+}
+
+@Composable
 private fun ArkanApp() {
     val context = LocalContext.current
     var whiteCanvas by remember { mutableStateOf(context.getSharedPreferences("arkan_settings", android.content.Context.MODE_PRIVATE).getBoolean("white_canvas", false)) }
@@ -252,7 +269,13 @@ private fun ArkanApp() {
         val stored = entity.color ?: (layer?.color ?: 0xFFFFFFFF)
         return if (whiteCanvas && entity.layer == "0" && entity.color == null && stored == 0xFFFFFFFF) Color.Black else Color(stored)
     }
-    val visibleCadEntities = cadEntities.filter { entity -> cadLayers.firstOrNull { it.name == entity.layer }?.visible != false }
+    val visibleCadEntities = remember(cadEntities, cadLayers) {
+        cadEntities.filter { entity -> cadLayers.firstOrNull { it.name == entity.layer }?.visible != false }
+    }
+    // Cache ARC tessellation so zooming and panning do not repeat trigonometry every frame.
+    val renderedArcPoints = remember(visibleCadEntities) {
+        visibleCadEntities.filter { it.type == "ARC" }.associateWith { arcPoints(it.points, 48) }
+    }
 
     fun finishPendingCadDraft() {
         val points = cadDraft
@@ -980,7 +1003,7 @@ private fun ArkanApp() {
                             drawRect(entityColor, topLeft = Offset(minOf(a.x,b.x), minOf(a.y,b.y)), size = androidx.compose.ui.geometry.Size(kotlin.math.abs(b.x-a.x), kotlin.math.abs(b.y-a.y)), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
                         }
                         "ARC" -> {
-                            val pts = arcPoints(entity.points)
+                            val pts = renderedArcPoints[entity].orEmpty()
                             pts.zipWithNext().forEach { (a,b) -> drawLine(entityColor, a, b, 2f) }
                         }
                         "MEASURE_DIMENSION" -> if (entity.points.size >= 2) {
@@ -1091,12 +1114,12 @@ private fun ArkanApp() {
                     Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CadPaletteButton("−", "ZOOM OUT", {
+                    ZoomCircleButton("−") {
                         viewZoom = (viewZoom / 1.25f).coerceIn(0.0001f, 64f)
-                    })
-                    CadPaletteButton("＋", "ZOOM IN", {
+                    }
+                    ZoomCircleButton("+") {
                         viewZoom = (viewZoom * 1.25f).coerceIn(0.0001f, 64f)
-                    })
+                    }
                 }
             }
             }
