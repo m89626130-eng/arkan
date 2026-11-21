@@ -528,11 +528,11 @@ private fun ArkanApp() {
                     CadPaletteButton("▣", "SAVE DWG", {
                         dwgSaver.launch("ARKAN_DRAWING.dwg")
                     })
-                    CadPaletteButton("⚙", "SETTINGS", { showDisplaySettings = true })
                 }
             }
             Spacer(Modifier.height(5.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                CadPaletteButton("⚙", "SETTINGS", { showDisplaySettings = true })
                 CadPaletteButton("⌖", "UTM", { showGeoDialog = true })
                 CadPaletteButton("⇧", "OPEN DXF", { dxfPicker.launch(arrayOf("*/*")) })
                 CadPaletteButton("⇧", "OPEN DWG", { dwgPicker.launch(arrayOf("*/*")) })
