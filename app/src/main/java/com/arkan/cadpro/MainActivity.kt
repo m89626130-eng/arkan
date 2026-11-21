@@ -305,6 +305,29 @@ private fun ArkanApp() {
         cadDraft = emptyList()
     }
 
+    // Cache imported drawing extents: do not flatten and scan every coordinate on every frame.
+    val importedBounds = remember(importedPaths, importedManholes) {
+        var minE = Double.POSITIVE_INFINITY
+        var maxE = Double.NEGATIVE_INFINITY
+        var minN = Double.POSITIVE_INFINITY
+        var maxN = Double.NEGATIVE_INFINITY
+        importedPaths.forEach { path ->
+            path.points.forEach { point ->
+                if (point.first < minE) minE = point.first
+                if (point.first > maxE) maxE = point.first
+                if (point.second < minN) minN = point.second
+                if (point.second > maxN) maxN = point.second
+            }
+        }
+        importedManholes.forEach { mh ->
+            if (mh.easting < minE) minE = mh.easting
+            if (mh.easting > maxE) maxE = mh.easting
+            if (mh.northing < minN) minN = mh.northing
+            if (mh.northing > maxN) maxN = mh.northing
+        }
+        if (minE.isFinite()) doubleArrayOf(minE, maxE, minN, maxN) else null
+    }
+
     val totalLength = pipes.sumOf { hypot((it.b.x-it.a.x).toDouble(), (it.b.y-it.a.y).toDouble()) / PX_PER_METER }
     val effectiveManholes = if (importedKml != null) importedManholes else manholes
     val totalExcavation = effectiveManholes.sumOf { it.excavation }
@@ -983,12 +1006,12 @@ private fun ArkanApp() {
             }) {
                 // Plain black CAD workspace: grid removed; drawing is allowed anywhere on the canvas.
                 if (importedPaths.isNotEmpty() || importedManholes.isNotEmpty()) {
-                    val allCoords = importedPaths.flatMap { it.points } + importedManholes.map { it.easting to it.northing }
-                    if (allCoords.isNotEmpty()) {
-                        val minE = allCoords.minOf { it.first }
-                        val maxE = allCoords.maxOf { it.first }
-                        val minN = allCoords.minOf { it.second }
-                        val maxN = allCoords.maxOf { it.second }
+                    val bounds = importedBounds
+                    if (bounds != null) {
+                        val minE = bounds[0]
+                        val maxE = bounds[1]
+                        val minN = bounds[2]
+                        val maxN = bounds[3]
                         val spanE = (maxE - minE).coerceAtLeast(0.01)
                         val spanN = (maxN - minN).coerceAtLeast(0.01)
                         val fit = minOf((size.width - 36f) / spanE.toFloat(), (size.height - 36f) / spanN.toFloat()).coerceAtLeast(0.0001f)
