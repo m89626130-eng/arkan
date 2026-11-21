@@ -4,6 +4,7 @@
         android:extractNativeLibs="true"
         android:allowBackup="true"
         android:label="ARKAN CAD PRO"
+        android:icon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
