@@ -537,8 +537,6 @@ private fun ArkanApp() {
                 CadPaletteButton("⇧", "OPEN DXF", { dxfPicker.launch(arrayOf("*/*")) })
                 CadPaletteButton("⇧", "OPEN DWG", { dwgPicker.launch(arrayOf("*/*")) })
                 CadPaletteButton("⌫", "CLEAR", { showClearConfirm = true })
-                CadPaletteButton("+", "ZOOM", { viewZoom = (viewZoom * 1.25f).coerceAtMost(8f) })
-                CadPaletteButton("−", "ZOOM", { viewZoom = (viewZoom / 1.25f).coerceAtLeast(0.25f) })
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp)) {
