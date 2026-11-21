@@ -162,9 +162,9 @@ private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, s
             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(icon, color = if (selected) Color(0xFFFFD8E9) else Color(0xFFE7A0C1), fontSize = 23.sp, lineHeight = 25.sp)
+            Text(icon, color = if (selected) Color(0xFFFFD8E9) else Color(0xFFE7A0C1), fontSize = 18.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(1.dp))
-            Text(label, color = Color(0xFFF0D9E4), fontSize = 8.sp, maxLines = 1, softWrap = false)
+            Text(label, color = Color(0xFFF0D9E4), fontSize = 7.sp, maxLines = 1, softWrap = false)
         }
     }
 }
@@ -221,6 +221,7 @@ private fun ArkanApp() {
     var lastCoordinateTap by remember { mutableStateOf<Offset?>(null) }
     var coordinateCursorActive by remember { mutableStateOf(false) }
     var coordinateCursorPoint by remember { mutableStateOf<Offset?>(null) }
+    var coordinateCursorSnapped by remember { mutableStateOf(false) }
     var cadOffsetDistance by remember { mutableStateOf("0.25") }
     var cadCornerDistance by remember { mutableStateOf("0.25") }
     var cadScaleFactor by remember { mutableStateOf("2.0") }
@@ -576,8 +577,8 @@ private fun ArkanApp() {
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("ARKAN CAD PRO", color = Color(0xFFE8C4D5), fontSize = 20.sp)
-                    Text("CAD WORKSPACE", color = Color(0xFFD2AFC0), fontSize = 9.sp)
+                    Text("ARKAN CAD PRO", color = Color(0xFFE8C4D5), fontSize = 17.sp)
+                    Text("CAD WORKSPACE", color = Color(0xFFD2AFC0), fontSize = 8.sp)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     CadPaletteButton("↶", "UNDO", {
@@ -593,7 +594,7 @@ private fun ArkanApp() {
                     })
                 }
             }
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(2.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 CadPaletteButton("⚙", "SETTINGS", { showDisplaySettings = true })
                 CadPaletteButton("⌖", "UTM", { showGeoDialog = true })
@@ -605,6 +606,7 @@ private fun ArkanApp() {
                         coordinateCursorActive = true
                         showCoordinateReadout = true
                         coordinateCursorPoint = lastCoordinateTap ?: Offset(300f, 300f)
+                        coordinateCursorSnapped = false
                         status = "حرّك سهم X,Y إلى الركن أو بداية/نهاية الخط؛ سيظهر + عند نقطة الالتقاط."
                     } else {
                         val p = coordinateCursorPoint
@@ -623,7 +625,7 @@ private fun ArkanApp() {
                     }
                 }, selected = coordinateCursorActive)
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(2.dp))
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp)) {
             Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { centroid, pan, zoomChange, _ ->
                 val oldZoom = viewZoom
@@ -1197,29 +1199,56 @@ private fun ArkanApp() {
                     val cursorScreenX = cursor.x * viewZoom + viewPanX
                     val cursorScreenY = cursor.y * viewZoom + viewPanY
                     Box(
-                        Modifier.offset { IntOffset((cursorScreenX - 18f * density).roundToInt(), (cursorScreenY - 18f * density).roundToInt()) }
-                            .size(36.dp)
-                            .background(Color(0x3320E6D2), RoundedCornerShape(18.dp))
-                            .pointerInput(coordinateCursorActive, viewZoom, cadEntities) {
+                        // Invisible finger target. The plus sign appears only while snapped.
+                        Modifier.offset { IntOffset((cursorScreenX - 28f * density).roundToInt(), (cursorScreenY - 28f * density).roundToInt()) }
+                            .size(56.dp)
+                            .pointerInput(coordinateCursorActive, viewZoom, cadEntities, pipes, manholes) {
                                 detectDragGestures { change, dragAmount ->
                                     change.consume()
                                     val moved = Offset(currentCursor.x + dragAmount.x / viewZoom, currentCursor.y + dragAmount.y / viewZoom)
-                                    val snapPoints = cadEntities.flatMap { entity ->
-                                        if (entity.type == "RECTANGLE" && entity.points.size >= 2) {
-                                            val a = entity.points[0]; val b = entity.points[1]
-                                            listOf(a, Offset(b.x,a.y), b, Offset(a.x,b.y))
-                                        } else entity.points
+                                    val candidates = mutableListOf<Offset>()
+                                    val segments = mutableListOf<Pair<Offset, Offset>>()
+                                    cadEntities.forEach { entity ->
+                                        val pts = entity.points
+                                        if (entity.type == "RECTANGLE" && pts.size >= 2) {
+                                            val a = pts[0]; val b = pts[1]
+                                            val corners = listOf(a, Offset(b.x,a.y), b, Offset(a.x,b.y))
+                                            candidates.addAll(corners)
+                                            for (i in corners.indices) segments.add(corners[i] to corners[(i+1)%corners.size])
+                                        } else {
+                                            candidates.addAll(pts)
+                                            for (i in 0 until pts.size-1) segments.add(pts[i] to pts[i+1])
+                                        }
                                     }
-                                    val allSnapPoints = snapPoints + pipes.flatMap { listOf(it.a, it.b) } + manholes.map { it.point }
-                                    val nearest = allSnapPoints.minByOrNull { hypot((it.x-moved.x).toDouble(), (it.y-moved.y).toDouble()) }
-                                    val snapped = if (nearest != null && hypot((nearest.x-moved.x).toDouble(), (nearest.y-moved.y).toDouble()) * viewZoom <= 22f * density) nearest else moved
-                                    coordinateCursorPoint = snapped
-                                    if (snapped != moved) status = "OSNAP + | تم التقاط الركن/نقطة الخط."
+                                    pipes.forEach { pipe ->
+                                        candidates.add(pipe.a); candidates.add(pipe.b)
+                                        segments.add(pipe.a to pipe.b)
+                                    }
+                                    manholes.forEach { candidates.add(it.point) }
+                                    var nearestPoint: Offset? = null
+                                    var nearestDistance = Float.MAX_VALUE
+                                    fun consider(point: Offset) {
+                                        val d = hypot((point.x-moved.x).toDouble(), (point.y-moved.y).toDouble()).toFloat()
+                                        if (d < nearestDistance) { nearestDistance = d; nearestPoint = point }
+                                    }
+                                    candidates.forEach { consider(it) }
+                                    segments.forEach { (a,b) ->
+                                        val dx=b.x-a.x; val dy=b.y-a.y
+                                        val len2=dx*dx+dy*dy
+                                        if (len2>0.0001f) {
+                                            val t=(((moved.x-a.x)*dx+(moved.y-a.y)*dy)/len2).coerceIn(0f,1f)
+                                            consider(Offset(a.x+t*dx,a.y+t*dy))
+                                        }
+                                    }
+                                    val snapped = nearestPoint != null && nearestDistance * viewZoom <= 22f * density
+                                    coordinateCursorPoint = if (snapped) nearestPoint else moved
+                                    coordinateCursorSnapped = snapped
+                                    if (snapped) status = "OSNAP + | تم التقاط الحافة أو الركن."
                                 }
                             },
                         contentAlignment = androidx.compose.ui.Alignment.Center
                     ) {
-                        Text("＋", color = Color(0xFF20E6D2), fontSize = 30.sp, lineHeight = 32.sp)
+                        if (coordinateCursorSnapped) Text("+", color = Color(0xFF20E6D2), fontSize = 28.sp, lineHeight = 30.sp)
                     }
                 }
                 Row(
@@ -1235,9 +1264,9 @@ private fun ArkanApp() {
                 }
             }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(2.dp))
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(3.dp))
             if (selectedCadTab == "EDIT") {
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(cadOffsetDistance, { cadOffsetDistance = it }, label = { Text("OFFSET m") }, modifier = Modifier.weight(1f), singleLine = true)
