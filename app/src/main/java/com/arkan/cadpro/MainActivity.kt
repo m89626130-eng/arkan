@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
@@ -275,6 +276,15 @@ private fun ArkanApp() {
     // Cache ARC tessellation so zooming and panning do not repeat trigonometry every frame.
     val renderedArcPoints = remember(visibleCadEntities) {
         visibleCadEntities.filter { it.type == "ARC" }.associateWith { arcPoints(it.points, 48) }
+    }
+    // Cache POLYLINE geometry once; avoid issuing one drawLine call per vertex on every frame.
+    val renderedPolylinePaths = remember(visibleCadEntities) {
+        visibleCadEntities.filter { it.type == "POLYLINE" && it.points.size >= 2 }.associateWith { entity ->
+            Path().apply {
+                moveTo(entity.points.first().x, entity.points.first().y)
+                entity.points.drop(1).forEach { lineTo(it.x, it.y) }
+            }
+        }
     }
 
     fun finishPendingCadDraft() {
@@ -563,7 +573,14 @@ private fun ArkanApp() {
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp)) {
-            Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { _, pan, zoomChange, _ -> viewZoom = (viewZoom * zoomChange).coerceIn(0.0001f, 64f); viewPanX += pan.x; viewPanY += pan.y } }.pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
+            Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { centroid, pan, zoomChange, _ ->
+                val oldZoom = viewZoom
+                val newZoom = (oldZoom * zoomChange).coerceIn(0.0001f, 64f)
+                val zoomRatio = newZoom / oldZoom
+                viewPanX = centroid.x - (centroid.x - viewPanX) * zoomRatio + pan.x
+                viewPanY = centroid.y - (centroid.y - viewPanY) * zoomRatio + pan.y
+                viewZoom = newZoom
+            } }.pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
                     if (mode == "POLYLINE" && cadDraft.size >= 2) {                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
                         cadRedo = emptyList()
@@ -993,7 +1010,9 @@ private fun ArkanApp() {
                     val entityColor = cadEntityColor(entity)
                     when (entity.type) {
                         "LINE" -> if (entity.points.size >= 2) drawLine(entityColor, entity.points[0], entity.points[1], 2f)
-                        "POLYLINE" -> entity.points.zipWithNext().forEach { (a,b) -> drawLine(entityColor, a, b, 2f) }
+                        "POLYLINE" -> renderedPolylinePaths[entity]?.let { path ->
+                            drawPath(path, entityColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
+                        }
                         "CIRCLE" -> if (entity.points.size >= 2) {
                             val c = entity.points[0]; val edge = entity.points[1]
                             drawCircle(entityColor, hypot((edge.x-c.x).toDouble(), (edge.y-c.y).toDouble()).toFloat(), c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f))
