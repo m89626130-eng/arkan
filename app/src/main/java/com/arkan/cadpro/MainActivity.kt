@@ -146,12 +146,12 @@ private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, s
         shape = RoundedCornerShape(5.dp),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (selected) Color(0xFF174B58) else Color(0xFF252B31),
+            containerColor = if (selected) Color(0xFF762D49) else Color(0xFF43172B),
             contentColor = Color.White
         ),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (selected) Color(0xFF39C6D8) else Color(0xFF3A444C)
+            if (selected) Color(0xFFE7A0C1) else Color(0xFF8A4562)
         )
     ) {
         Column(
@@ -159,9 +159,9 @@ private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, s
             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(icon, color = if (selected) Color.White else Color(0xFF59D7E5), fontSize = 23.sp, lineHeight = 25.sp)
+            Text(icon, color = if (selected) Color(0xFFFFD8E9) else Color(0xFFE7A0C1), fontSize = 23.sp, lineHeight = 25.sp)
             Spacer(Modifier.height(1.dp))
-            Text(label, color = Color(0xFFE4E9EC), fontSize = 8.sp, maxLines = 1, softWrap = false)
+            Text(label, color = Color(0xFFF0D9E4), fontSize = 8.sp, maxLines = 1, softWrap = false)
         }
     }
 }
@@ -174,12 +174,12 @@ private fun ZoomCircleButton(symbol: String, onClick: () -> Unit) {
         shape = androidx.compose.foundation.shape.CircleShape,
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = Color(0xFF252B31),
-            contentColor = Color(0xFF59D7E5)
+            containerColor = Color(0xFF351323),
+            contentColor = Color(0xFFE7A0C1)
         ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A444C))
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8A4562))
     ) {
-        Text(symbol, fontSize = 19.sp, lineHeight = 20.sp, color = Color(0xFF59D7E5))
+        Text(symbol, fontSize = 19.sp, lineHeight = 20.sp, color = Color(0xFFE7A0C1))
     }
 }
 
@@ -561,16 +561,16 @@ private fun ArkanApp() {
     }
 
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF00C8A0), background = Color(0xFF101418), surface = Color(0xFF1B2329))) {
+    MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFFE7A0C1), secondary = Color(0xFFB86A88), background = Color(0xFF08172B), surface = Color(0xFF351323))) {
 
         Column(
-            Modifier.fillMaxSize().background(Color(0xFF101418))
+            Modifier.fillMaxSize().background(Color(0xFF08172B))
                 .statusBarsPadding().navigationBarsPadding().padding(8.dp)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("ARKAN CAD PRO", color = Color(0xFF53D8E5), fontSize = 20.sp)
-                    Text("CAD WORKSPACE", color = Color(0xFF9AAAB2), fontSize = 9.sp)
+                    Text("ARKAN CAD PRO", color = Color(0xFFE8C4D5), fontSize = 20.sp)
+                    Text("CAD WORKSPACE", color = Color(0xFFD2AFC0), fontSize = 9.sp)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     CadPaletteButton("↶", "UNDO", {
