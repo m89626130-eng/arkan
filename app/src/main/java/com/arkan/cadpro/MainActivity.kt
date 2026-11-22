@@ -1130,8 +1130,8 @@ private fun ArkanApp() {
                             drawLine(entityColor,da,Offset(da.x+(dx/length*arrow)-(nx*arrow*0.55f),da.y+(dy/length*arrow)-(ny*arrow*0.55f)),2f)
                             drawLine(entityColor,db,Offset(db.x-(dx/length*arrow)+(nx*arrow*0.55f),db.y-(dy/length*arrow)+(ny*arrow*0.55f)),2f)
                             drawLine(entityColor,db,Offset(db.x-(dx/length*arrow)-(nx*arrow*0.55f),db.y-(dy/length*arrow)-(ny*arrow*0.55f)),2f)
-                            val label = "%.3f m".format(Locale.US,length/PX_PER_METER)
-                            val paint = Paint().apply { color = entityColor.toArgb(); textSize = 16f; isAntiAlias = true; textAlign = Paint.Align.CENTER; style = Paint.Style.FILL }
+                            val label = "%.4f".format(Locale.US,length/PX_PER_METER)
+                            val paint = Paint().apply { color = Color(0xFF00E5E5).toArgb(); textSize = 90f; isAntiAlias = true; textAlign = Paint.Align.CENTER; style = Paint.Style.FILL }
                             drawContext.canvas.nativeCanvas.drawText(label,(da.x+db.x)/2f,(da.y+db.y)/2f-7f,paint)
                         }
                         "DIMENSION", "DIM_ALIGNED", "DIM_LINEAR" -> if (entity.points.size >= 2) {
