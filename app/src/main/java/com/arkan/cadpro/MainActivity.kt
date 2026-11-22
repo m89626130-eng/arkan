@@ -1492,16 +1492,6 @@ private fun ArkanApp() {
                     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text("✓", color = Color.White, fontSize = 27.sp, modifier = Modifier.clickable { showMeasurePanel = false }.padding(horizontal = 14.dp))
                         Text("×", color = Color.White, fontSize = 29.sp, modifier = Modifier.clickable { showMeasurePanel = false; measureLastResult = "" }.padding(horizontal = 14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("%.4f".format(Locale.US, measureDeltaX), color = Color.White, fontSize = 14.sp)
-                            Spacer(Modifier.height(7.dp))
-                            Text("%.4f".format(Locale.US, measureDeltaY), color = Color.White, fontSize = 14.sp)
-                        }
-                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                            Text("X Increment", color = Color.White, fontSize = 14.sp)
-                            Spacer(Modifier.height(7.dp))
-                            Text("Y Increment", color = Color.White, fontSize = 14.sp)
-                        }
                     }
                 }
             }
