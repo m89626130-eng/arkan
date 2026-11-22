@@ -2170,7 +2170,7 @@ private object DxfKmlImporter {
         if (headerStart != null) {
             var idx = headerStart + 2
             while (idx < pairs.size && !(pairs[idx].code == 0 && pairs[idx].value.equals("ENDSEC", true))) {
-                if (pairs[idx].code == 9 && pairs[idx].value.equals("$INSUNITS", true)) {
+                if (pairs[idx].code == 9 && pairs[idx].value.equals("\$INSUNITS", true)) {
                     insUnits = pairs.getOrNull(idx + 1)?.takeIf { it.code == 70 }?.value?.toIntOrNull()
                     break
                 }
