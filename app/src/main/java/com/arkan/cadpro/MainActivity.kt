@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
@@ -195,7 +196,7 @@ private fun ZoomCircleButton(symbol: String, onClick: () -> Unit) {
         shape = androidx.compose.foundation.shape.CircleShape,
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = Color(0xFF351323),
+            containerColor = Color.Transparent,
             contentColor = Color(0xFFE7A0C1)
         ),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8A4562))
@@ -649,7 +650,7 @@ private fun ArkanApp() {
                 }, selected = coordinateCursorActive)
             }
             Spacer(Modifier.height(2.dp))
-            Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp)) {
+            Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp).clipToBounds()) {
             Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { centroid, pan, zoomChange, _ ->
                 val oldZoom = viewZoom
                 val newZoom = (oldZoom * zoomChange).coerceIn(0.0001f, 64f)
@@ -1281,15 +1282,16 @@ private fun ArkanApp() {
                         if (coordinateCursorSnapped) Text("+", color = Color(0xFF20E6D2), fontSize = 28.sp, lineHeight = 30.sp)
                     }
                 }
-                Row(
+                Column(
                     Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
                 ) {
-                    ZoomCircleButton("−") {
-                        viewZoom = (viewZoom / 1.25f).coerceIn(0.0001f, 64f)
-                    }
                     ZoomCircleButton("+") {
                         viewZoom = (viewZoom * 1.25f).coerceIn(0.0001f, 64f)
+                    }
+                    ZoomCircleButton("−") {
+                        viewZoom = (viewZoom / 1.25f).coerceIn(0.0001f, 64f)
                     }
                 }
             }
@@ -1333,7 +1335,7 @@ private fun ArkanApp() {
                 }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                val commandItems: List<Pair<String, String>> = when (selectedCadTab) {
+                val commandItems: List<Pair<String, String>> = if (selectedCadTab == "MEASURE" && mode.startsWith("MEASURE")) emptyList() else when (selectedCadTab) {
                     "DRAW" -> listOf("LINE" to "╱", "POLYLINE" to "⌁", "CIRCLE" to "◯", "RECTANGLE" to "▭", "ARC" to "⌒", "TEXT" to "T")
                     "EDIT" -> listOf("MOVE" to "✥", "COPY" to "▣", "ROTATE" to "⟳", "MIRROR" to "⇄", "TRIM" to "✂", "EXTEND" to "↗", "STRETCH" to "↔", "OFFSET" to "⇉", "FILLET" to "⌒", "CHAMFER" to "⌜", "SCALE" to "⤢", "DELETE" to "⌫")
                     "LAYER" -> listOf("NEW LAYER" to "＋", "CURRENT LAYER" to "▤", "LOCK/UNLOCK" to "▣")
