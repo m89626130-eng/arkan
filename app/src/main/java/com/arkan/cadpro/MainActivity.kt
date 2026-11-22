@@ -147,7 +147,7 @@ class MainActivity : ComponentActivity() {
 private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, selected: Boolean = false) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.width(78.dp).height(84.dp),
+        modifier = Modifier.width(64.dp).height(70.dp),
         shape = RoundedCornerShape(8.dp),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 3.dp),
         colors = ButtonDefaults.outlinedButtonColors(
@@ -165,7 +165,7 @@ private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, s
             verticalArrangement = Arrangement.Center
         ) {
             Box(
-                modifier = Modifier.size(50.dp)
+                modifier = Modifier.size(40.dp)
                     .background(
                         if (selected) Color(0xFF8A3658) else Color(0xFF43172B),
                         androidx.compose.foundation.shape.CircleShape
@@ -179,10 +179,10 @@ private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, s
                     ),
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
-                Text(icon, color = Color(0xFFFFD8E9), fontSize = 23.sp, lineHeight = 25.sp)
+                Text(icon, color = Color(0xFFFFD8E9), fontSize = 19.sp, lineHeight = 21.sp)
             }
-            Spacer(Modifier.height(4.dp))
-            Text(label, color = Color(0xFFF0D9E4), fontSize = 9.sp, lineHeight = 11.sp, maxLines = 1, softWrap = false)
+            Spacer(Modifier.height(2.dp))
+            Text(label, color = Color(0xFFF0D9E4), fontSize = 8.sp, lineHeight = 9.sp, maxLines = 1, softWrap = false)
         }
     }
 }
