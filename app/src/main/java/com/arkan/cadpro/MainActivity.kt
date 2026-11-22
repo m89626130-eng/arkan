@@ -145,16 +145,16 @@ class MainActivity : ComponentActivity() {
 private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, selected: Boolean = false) {
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.width(66.dp).height(60.dp),
-        shape = RoundedCornerShape(5.dp),
-        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
+        modifier = Modifier.width(78.dp).height(84.dp),
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 3.dp),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (selected) Color(0xFF762D49) else Color(0xFF43172B),
+            containerColor = Color.Transparent,
             contentColor = Color.White
         ),
         border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (selected) Color(0xFFE7A0C1) else Color(0xFF8A4562)
+            if (selected) 1.5.dp else 0.dp,
+            if (selected) Color(0xFFE7A0C1) else Color.Transparent
         )
     ) {
         Column(
@@ -162,9 +162,25 @@ private fun CadPaletteButton(icon: String, label: String, onClick: () -> Unit, s
             horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(icon, color = if (selected) Color(0xFFFFD8E9) else Color(0xFFE7A0C1), fontSize = 18.sp, lineHeight = 20.sp)
-            Spacer(Modifier.height(1.dp))
-            Text(label, color = Color(0xFFF0D9E4), fontSize = 7.sp, maxLines = 1, softWrap = false)
+            Box(
+                modifier = Modifier.size(50.dp)
+                    .background(
+                        if (selected) Color(0xFF8A3658) else Color(0xFF43172B),
+                        androidx.compose.foundation.shape.CircleShape
+                    )
+                    .then(
+                        Modifier.border(
+                            1.5.dp,
+                            if (selected) Color(0xFFFFD8E9) else Color(0xFFB66A89),
+                            androidx.compose.foundation.shape.CircleShape
+                        )
+                    ),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Text(icon, color = Color(0xFFFFD8E9), fontSize = 23.sp, lineHeight = 25.sp)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(label, color = Color(0xFFF0D9E4), fontSize = 9.sp, lineHeight = 11.sp, maxLines = 1, softWrap = false)
         }
     }
 }
