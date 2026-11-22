@@ -1466,36 +1466,7 @@ private fun ArkanApp() {
                 }
             }
             Spacer(Modifier.height(6.dp))
-            if (showMeasurePanel || mode.startsWith("MEASURE_")) {
-                Column(Modifier.fillMaxWidth().background(Color(0xFF303030)).padding(horizontal = 10.dp, vertical = 8.dp)) {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("A↕", color = Color(0xFFE5E5E5), fontSize = 28.sp)
-                        Box(Modifier.size(30.dp).background(Color(0xFF00E5E5), RoundedCornerShape(6.dp)))
-                        Spacer(Modifier.weight(1f))
-                        Text("Check the result and mark it on the drawing", color = Color.White, fontSize = 12.sp)
-                        Checkbox(checked = measureShowOnDrawing, onCheckedChange = { measureShowOnDrawing = it }, colors = CheckboxDefaults.colors(checkedColor = Color(0xFF00DADA), uncheckedColor = Color.LightGray))
-                    }
-                    Divider(color = Color(0xFF777777), thickness = 1.dp)
-                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("N\n↔", color = Color.White, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("%.4f".format(Locale.US, measureLengthValue), color = Color.White, fontSize = 15.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Text("%.0f".format(Locale.US, measureAngleValue), color = Color.White, fontSize = 15.sp)
-                        }
-                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                            Text("Length", color = Color.White, fontSize = 14.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Text("Angle", color = Color.White, fontSize = 14.sp)
-                        }
-                    }
-                    Divider(color = Color(0xFF777777), thickness = 1.dp)
-                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("✓", color = Color.White, fontSize = 27.sp, modifier = Modifier.clickable { showMeasurePanel = false }.padding(horizontal = 14.dp))
-                        Text("×", color = Color.White, fontSize = 29.sp, modifier = Modifier.clickable { showMeasurePanel = false; measureLastResult = "" }.padding(horizontal = 14.dp))
-                    }
-                }
-            }
+
             Column(Modifier.fillMaxWidth().heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
             Text("كل مربع = 1 متر (مقياس تجريبي) • $status", color=Color.White,fontSize=11.sp)
             Text("طول الأنابيب: %.2f م | المناهيل: %d | حفر المناهيل: %.2f م³".format(Locale.US,effectivePipeLength,if (importedKml != null) importedManholeCount else manholes.size,totalExcavation),color=Color(0xFF00C8A0),fontSize=12.sp)
