@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -247,6 +248,11 @@ private fun ArkanApp() {
     var measureDraft by remember { mutableStateOf(listOf<Offset>()) }
     var measureLastResult by remember { mutableStateOf("") }
     var measureShowOnDrawing by remember { mutableStateOf(true) }
+    var measureLengthValue by remember { mutableStateOf(0.0) }
+    var measureAngleValue by remember { mutableStateOf(0.0) }
+    var measureDeltaX by remember { mutableStateOf(0.0) }
+    var measureDeltaY by remember { mutableStateOf(0.0) }
+    var showMeasurePanel by remember { mutableStateOf(false) }
     var manholes by remember { mutableStateOf(listOf<Manhole>()) }
     var mode by remember { mutableStateOf("PIPE") }
     var pipeStart by remember { mutableStateOf<Offset?>(null) }
@@ -675,7 +681,12 @@ private fun ArkanApp() {
                                 val length = hypot((tap.x-first.x).toDouble(), (tap.y-first.y).toDouble()) / PX_PER_METER
                                 val dx = (tap.x-first.x) / PX_PER_METER
                                 val dy = -(tap.y-first.y) / PX_PER_METER
-                                val angle = Math.toDegrees(atan2((tap.y-first.y).toDouble(), (tap.x-first.x).toDouble()))
+                                val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
+                                measureLengthValue = length
+                                measureAngleValue = angle
+                                measureDeltaX = dx.toDouble()
+                                measureDeltaY = dy.toDouble()
+                                showMeasurePanel = true
                                 val result = "Length: %.3f m   |   Angle: %.2f°   |   ΔX: %.3f m   |   ΔY: %.3f m".format(Locale.US, length, angle, dx, dy)
                                 measureLastResult = result
                                 if (measureShowOnDrawing) {
@@ -696,7 +707,9 @@ private fun ArkanApp() {
                             else {
                                 val pts = arcPoints(cadEntities[hit].points, 96)
                                 val length = pts.zipWithNext().sumOf { (a,b) -> hypot((b.x-a.x).toDouble(),(b.y-a.y).toDouble()) } / PX_PER_METER
+                                measureLengthValue = length
                                 measureLastResult = "Arc Length: %.3f m".format(Locale.US, length)
+                                showMeasurePanel = true
                                 status = measureLastResult; mode = "PIPE"
                             }
                         }
@@ -1452,6 +1465,46 @@ private fun ArkanApp() {
                 }
             }
             Spacer(Modifier.height(6.dp))
+            if (showMeasurePanel || mode.startsWith("MEASURE_")) {
+                Column(Modifier.fillMaxWidth().background(Color(0xFF303030)).padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("A↕", color = Color(0xFFE5E5E5), fontSize = 28.sp)
+                        Box(Modifier.size(30.dp).background(Color(0xFF00E5E5), RoundedCornerShape(6.dp)))
+                        Spacer(Modifier.weight(1f))
+                        Text("Check the result and mark it on the drawing", color = Color.White, fontSize = 12.sp)
+                        Checkbox(checked = measureShowOnDrawing, onCheckedChange = { measureShowOnDrawing = it }, colors = CheckboxDefaults.colors(checkedColor = Color(0xFF00DADA), uncheckedColor = Color.LightGray))
+                    }
+                    Divider(color = Color(0xFF777777), thickness = 1.dp)
+                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("N\n↔", color = Color.White, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("%.4f".format(Locale.US, measureLengthValue), color = Color.White, fontSize = 15.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Text("%.0f".format(Locale.US, measureAngleValue), color = Color.White, fontSize = 15.sp)
+                        }
+                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                            Text("Length", color = Color.White, fontSize = 14.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Angle", color = Color.White, fontSize = 14.sp)
+                        }
+                    }
+                    Divider(color = Color(0xFF777777), thickness = 1.dp)
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("✓", color = Color.White, fontSize = 27.sp, modifier = Modifier.clickable { showMeasurePanel = false }.padding(horizontal = 14.dp))
+                        Text("×", color = Color.White, fontSize = 29.sp, modifier = Modifier.clickable { showMeasurePanel = false; measureLastResult = "" }.padding(horizontal = 14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("%.4f".format(Locale.US, measureDeltaX), color = Color.White, fontSize = 14.sp)
+                            Spacer(Modifier.height(7.dp))
+                            Text("%.4f".format(Locale.US, measureDeltaY), color = Color.White, fontSize = 14.sp)
+                        }
+                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                            Text("X Increment", color = Color.White, fontSize = 14.sp)
+                            Spacer(Modifier.height(7.dp))
+                            Text("Y Increment", color = Color.White, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
             Column(Modifier.fillMaxWidth().heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
             Text("كل مربع = 1 متر (مقياس تجريبي) • $status", color=Color.White,fontSize=11.sp)
             Text("طول الأنابيب: %.2f م | المناهيل: %d | حفر المناهيل: %.2f م³".format(Locale.US,effectivePipeLength,if (importedKml != null) importedManholeCount else manholes.size,totalExcavation),color=Color(0xFF00C8A0),fontSize=12.sp)
