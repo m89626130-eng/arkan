@@ -2160,6 +2160,58 @@ private object DxfKmlImporter {
             i += 2
         }
 
+        // Read DXF drawing units from HEADER/$INSUNITS. All imported geometry is normalized to meters.
+        val headerStart = pairs.indices.firstOrNull { idx ->
+            pairs[idx].code == 0 && pairs[idx].value.equals("SECTION", true) &&
+                idx + 1 < pairs.size && pairs[idx + 1].code == 2 &&
+                pairs[idx + 1].value.equals("HEADER", true)
+        }
+        var insUnits: Int? = null
+        if (headerStart != null) {
+            var idx = headerStart + 2
+            while (idx < pairs.size && !(pairs[idx].code == 0 && pairs[idx].value.equals("ENDSEC", true))) {
+                if (pairs[idx].code == 9 && pairs[idx].value.equals("$INSUNITS", true)) {
+                    insUnits = pairs.getOrNull(idx + 1)?.takeIf { it.code == 70 }?.value?.toIntOrNull()
+                    break
+                }
+                idx++
+            }
+        }
+        val unitToMeter = when (insUnits) {
+            1 -> 0.0254       // inches
+            2 -> 0.3048       // feet
+            3 -> 1609.344     // miles
+            4 -> 0.001        // millimeters
+            5 -> 0.01         // centimeters
+            6 -> 1.0          // meters
+            7 -> 1000.0       // kilometers
+            8 -> 2.54e-8      // microinches
+            9 -> 2.54e-5      // mils
+            10 -> 0.9144      // yards
+            11 -> 1.0e-10     // angstroms
+            12 -> 1.0e-9      // nanometers
+            13 -> 1.0e-6      // microns
+            14 -> 0.1         // decimeters
+            15 -> 10.0        // decameters
+            16 -> 100.0       // hectometers
+            17 -> 1000.0      // gigameters (DXF INSUNITS code 17)
+            18 -> 149597870700.0 // astronomical units
+            19 -> 9.4607304725808e15 // light years
+            20 -> 3.0856775814913673e16 // parsecs
+            null, 0 -> error("وحدة الرسم غير محددة في DXF ($" + "INSUNITS=0). اختر وحدة الرسم في AutoCAD ثم احفظ DXF مجدداً: 4=mm، 5=cm، 6=m، 1=inch، 2=feet.")
+            else -> error("قيمة $INSUNITS غير مدعومة: $insUnits")
+        }
+        if (unitToMeter != 1.0) {
+            val geometricCodes = setOf(10,11,12,13,14,20,21,22,23,24,30,31,32,33,34,40)
+            for (idx in pairs.indices) {
+                val p = pairs[idx]
+                if (p.code in geometricCodes) {
+                    val value = p.value.toDoubleOrNull()
+                    if (value != null) pairs[idx] = p.copy(value = (value * unitToMeter).toString())
+                }
+            }
+        }
+
         // A section starts with 0/SECTION followed by 2/ENTITIES.
         val sectionMarker = pairs.indices.firstOrNull { index ->
             pairs[index].code == 0 && pairs[index].value.equals("SECTION", true) &&                index + 1 < pairs.size && pairs[index + 1].code == 2 &&
