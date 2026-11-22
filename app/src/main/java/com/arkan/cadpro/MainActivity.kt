@@ -2199,7 +2199,7 @@ private object DxfKmlImporter {
             19 -> 9.4607304725808e15 // light years
             20 -> 3.0856775814913673e16 // parsecs
             null, 0 -> error("وحدة الرسم غير محددة في DXF ($" + "INSUNITS=0). اختر وحدة الرسم في AutoCAD ثم احفظ DXF مجدداً: 4=mm، 5=cm، 6=m، 1=inch، 2=feet.")
-            else -> error("قيمة $INSUNITS غير مدعومة: $insUnits")
+            else -> error("قيمة $" + "INSUNITS غير مدعومة: $insUnits")
         }
         if (unitToMeter != 1.0) {
             val geometricCodes = setOf(10,11,12,13,14,20,21,22,23,24,30,31,32,33,34,40)
