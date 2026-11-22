@@ -1582,6 +1582,32 @@ private fun ArkanApp() {
         confirmButton = { TextButton(onClick = { showDisplaySettings = false }) { Text("تم") } }
     )
 
+    if (showPipeDiameterMenu) AlertDialog(
+        onDismissRequest = { showPipeDiameterMenu = false },
+        title = { Text("اختيار قطر الأنبوب / PIPE DIAMETER") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(250, 315, 400, 500, 600, 700).chunked(3).forEach { rowDiameters ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rowDiameters.forEach { diameter ->
+                            OutlinedButton(
+                                onClick = {
+                                    pipeLayer = "PIPE-$diameter"
+                                    mode = "PIPE"
+                                    pipeStart = null
+                                    showPipeDiameterMenu = false
+                                    status = "تم اختيار أنبوب قطر $diameter مم. حدد نقطة البداية ثم النهاية."
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("$diameter mm") }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { showPipeDiameterMenu = false }) { Text("إغلاق") } }
+    )
+
     if (showSlopeDialog) AlertDialog(
         onDismissRequest = { showSlopeDialog = false },
         title = { Text("نسبة ميل أنابيب الصرف الصحي") },
