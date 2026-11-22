@@ -653,7 +653,7 @@ private fun ArkanApp() {
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp).clipToBounds()) {
             Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { centroid, pan, zoomChange, _ ->
                 val oldZoom = viewZoom
-                val newZoom = (oldZoom * zoomChange).coerceIn(0.0001f, 64f)
+                val newZoom = (oldZoom * zoomChange).coerceIn(0.000001f, 100000f)
                 val zoomRatio = newZoom / oldZoom
                 viewPanX = centroid.x - (centroid.x - viewPanX) * zoomRatio + pan.x
                 viewPanY = centroid.y - (centroid.y - viewPanY) * zoomRatio + pan.y
