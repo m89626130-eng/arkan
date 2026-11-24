@@ -709,7 +709,12 @@ private fun ArkanApp() {
                         status = "تم إنهاء POLYLINE."
                     }
                 }, onTap = { screenTap ->
-                    val tap = snapCadPoint(screenTap)
+                    // Convert the canvas touch position back into model coordinates. This keeps drawing aligned after zoom/pan and allows long real-world lines while zoomed out.
+                    val modelTap = Offset(
+                        (screenTap.x - viewPanX) / viewZoom.coerceAtLeast(0.000001f),
+                        (screenTap.y - viewPanY) / viewZoom.coerceAtLeast(0.000001f)
+                    )
+                    val tap = snapCadPoint(modelTap)
                     lastCoordinateTap = tap
                     if (showCoordinateReadout) {
                         val x = tap.x / PX_PER_METER
