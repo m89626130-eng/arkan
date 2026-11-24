@@ -275,6 +275,7 @@ private fun ArkanApp() {
     var utmZone by remember { mutableStateOf("38") }
     var dxfFileName by remember { mutableStateOf("لم يتم اختيار DXF") }
     var importedKml by remember { mutableStateOf<String?>(null) }
+    var importedDxfRaw by remember { mutableStateOf<String?>(null) }
     var importedSummary by remember { mutableStateOf("") }
     var importedLayerLengths by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var importedManholeCount by remember { mutableStateOf(0) }
@@ -423,6 +424,7 @@ private fun ArkanApp() {
             try {
                 val raw = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: error("تعذر قراءة الملف")
                 val converted = DxfKmlImporter.convert(raw, utmZone.toIntOrNull() ?: 38)
+                importedDxfRaw = raw
                 importedKml = converted.kml
                 importedSummary = converted.summary
                 importedLayerLengths = converted.layerLengths
@@ -454,6 +456,7 @@ private fun ArkanApp() {
                             "ناتج المحوّل ليس DXF صالحاً أو لا يحتوي قسم ENTITIES."                        }
                         DxfKmlImporter.convert(dxfText, utmZone.toIntOrNull() ?: 38)
                     }
+                    importedDxfRaw = dxfText
                     importedKml = converted.kml
                     importedSummary = converted.summary
                     importedLayerLengths = converted.layerLengths
@@ -622,13 +625,16 @@ private fun ArkanApp() {
 
     val kmlSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.google-earth.kml+xml")) { uri: Uri? ->
         if (uri != null) try {
-            val manualNetwork = if (importedKml == null && manholes.isNotEmpty()) DxfKmlImporter.convertManual(manholes, pipes, utmZone.toIntOrNull() ?: 38) else null
+            val selectedZone = utmZone.toIntOrNull() ?: 38
+            require(selectedZone in 1..60) { "رقم منطقة UTM يجب أن يكون بين 1 و60." }
+            val convertedImportedKml = importedDxfRaw?.let { DxfKmlImporter.convert(it, selectedZone).kml } ?: importedKml
+            val manualNetwork = if (convertedImportedKml == null && manholes.isNotEmpty()) DxfKmlImporter.convertManual(manholes, pipes, selectedZone) else null
             val lon = longitude.toDouble(); val lat = latitude.toDouble()
-            require(importedKml != null || manualNetwork != null || (lon in -180.0..180.0 && lat in -90.0..90.0))
-            val outputKml = importedKml ?: manualNetwork?.first ?: KmlPointWriter.point("ARKAN reference point", lon, lat)
+            require(convertedImportedKml != null || manualNetwork != null || (lon in -180.0..180.0 && lat in -90.0..90.0))
+            val outputKml = convertedImportedKml ?: manualNetwork?.first ?: KmlPointWriter.point("ARKAN reference point", lon, lat)
             context.contentResolver.openOutputStream(uri)?.use { OutputStreamWriter(it, Charsets.UTF_8).use { writer -> writer.write(outputKml) } }
             status = when {
-                importedKml != null -> "تم تصدير شبكة CAD إلى KML وفق UTM Zone ${utmZone}N."
+                convertedImportedKml != null -> "تم تصدير شبكة CAD إلى KML وفق UTM Zone ${selectedZone}N."
                 manualNetwork != null -> "تم تصدير ${manholes.size} منهل و${manualNetwork.second} مقطع أنبوب بإحداثيات UTM Zone ${utmZone}N."
                 else -> "تم حفظ نقطة KML المرجعية."
             }
@@ -1272,7 +1278,7 @@ private fun ArkanApp() {
                 }
             }
             Box(Modifier.fillMaxSize()) {
-                Box(Modifier.align(androidx.compose.ui.Alignment.CenterEnd).padding(end = 6.dp)) {
+                Box(Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp)) {
                     Surface(color = Color(0xFFFFD400), shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp), shadowElevation = 5.dp,
                         modifier = Modifier.clickable { showReportDialog = true }) {
                         Row(Modifier.padding(horizontal = 9.dp, vertical = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -1817,8 +1823,8 @@ private fun ArkanApp() {
     if(showKmlDialog) AlertDialog(
         onDismissRequest={showKmlDialog=false},title={Text(if (importedKml != null || manholes.isNotEmpty()) "تصدير شبكة المجاري KML" else "نقطة مرجعية KML / WGS84")},
         text={Column {
-            if (importedKml != null) Text("سيتم تصدير هندسة DXF المستوردة. $importedSummary\nالتحويل يفترض WGS84 / UTM Zone 38N.")
-            else if (manholes.isNotEmpty()) Text("سيتم تحويل إحداثيات N وE للمناهيل إلى WGS84 وتصدير نقاطها، وربط الأنبوب إذا كانت نهايتاه قريبتين من مركزي منهولين. النظام المفترض UTM Zone 38N.")
+            if (importedKml != null) Text("سيتم تحويل هندسة DXF/DWG المستوردة عند التصدير باستخدام UTM Zone ${utmZone}N. تأكد أن المنطقة تطابق إحداثيات الملف.")
+            else if (manholes.isNotEmpty()) Text("سيتم تحويل إحداثيات N وE للمناهيل إلى WGS84 وتصدير نقاطها، وربط الأنبوب إذا كانت نهايتاه قريبتين من مركزي منهولين. النظام المستخدم UTM Zone ${utmZone}N. تأكد من اختيار المنطقة الصحيحة للمشروع.")
             else {
                 OutlinedTextField(longitude,{longitude=it},label={Text("Longitude")})
                 OutlinedTextField(latitude,{latitude=it},label={Text("Latitude")})
