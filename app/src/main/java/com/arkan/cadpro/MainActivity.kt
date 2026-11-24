@@ -54,6 +54,40 @@ import kotlinx.coroutines.withContext
 private const val PX_PER_METER = 40f
 private fun localToUtm(point: Offset, originEasting: Double, originNorthing: Double): Pair<Double, Double> =
     (originEasting + point.x / PX_PER_METER) to (originNorthing - point.y / PX_PER_METER)
+
+private fun utmZoneFromLongitude(longitude: Double): Int {
+    require(longitude in -180.0..180.0) { "خط الطول يجب أن يكون بين -180 و180." }
+    return kotlin.math.floor((longitude + 180.0) / 6.0).toInt().coerceIn(0, 59) + 1
+}
+
+private fun wgs84ToUtm(longitude: Double, latitude: Double, zone: Int): Pair<Double, Double> {
+    require(longitude in -180.0..180.0 && latitude in -80.0..84.0) {
+        "إحداثيات WGS84 خارج نطاق تحويل UTM المعتاد."
+    }
+    require(zone in 1..60) { "رقم منطقة UTM يجب أن يكون بين 1 و60." }
+    val a = 6378137.0
+    val eccSq = 0.00669438
+    val k0 = 0.9996
+    val lat = Math.toRadians(latitude)
+    val lon = Math.toRadians(longitude)
+    val lonOrigin = Math.toRadians(zone * 6.0 - 183.0)
+    val eccPrimeSq = eccSq / (1.0 - eccSq)
+    val n = a / kotlin.math.sqrt(1.0 - eccSq * kotlin.math.sin(lat).pow(2))
+    val t = kotlin.math.tan(lat).pow(2)
+    val c = eccPrimeSq * kotlin.math.cos(lat).pow(2)
+    val aa = kotlin.math.cos(lat) * (lon - lonOrigin)
+    val m = a * ((1 - eccSq / 4 - 3 * eccSq.pow(2) / 64 - 5 * eccSq.pow(3) / 256) * lat
+        - (3 * eccSq / 8 + 3 * eccSq.pow(2) / 32 + 45 * eccSq.pow(3) / 1024) * kotlin.math.sin(2 * lat)
+        + (15 * eccSq.pow(2) / 256 + 45 * eccSq.pow(3) / 1024) * kotlin.math.sin(4 * lat)
+        - (35 * eccSq.pow(3) / 3072) * kotlin.math.sin(6 * lat))
+    val easting = k0 * n * (aa + (1 - t + c) * aa.pow(3) / 6
+        + (5 - 18 * t + t * t + 72 * c - 58 * eccPrimeSq) * aa.pow(5) / 120) + 500000.0
+    var northing = k0 * (m + n * kotlin.math.tan(lat) * (aa * aa / 2
+        + (5 - t + 9 * c + 4 * c * c) * aa.pow(4) / 24
+        + (61 - 58 * t + t * t + 600 * c - 330 * eccPrimeSq) * aa.pow(6) / 720))
+    if (latitude < 0) northing += 10000000.0
+    return easting to northing
+}
 private data class Pipe(val a: Offset, val b: Offset, val layer: String)
 private data class CadLayer(val name: String, val color: Long, val visible: Boolean = true, val locked: Boolean = false)
 private data class CadEntity(val type: String, val points: List<Offset>, val layer: String = "0", val text: String = "", val color: Long? = null)
@@ -1800,11 +1834,25 @@ private fun ArkanApp() {
         onDismissRequest = { showGeoDialog = false },
         title = { Text("النقطة المرجعية UTM / Zone ${utmZone}N") },
         text = { Column {
-            Text("أدخل إحداثيات الزاوية العليا اليسرى. اختر رقم منطقة UTM الصحيح للمشروع (1 إلى 60). الافتراضي للعراق Zone 38N.")
+            Text("حدد موقع نقطة أصل الرسم بإحداثيات WGS84 ليحسب التطبيق UTM Zone تلقائياً، أو أدخل Zone وEasting وNorthing يدوياً.")
+            OutlinedTextField(longitude, { longitude = it }, label = { Text("Longitude (خط الطول)") }, singleLine = true)
+            OutlinedTextField(latitude, { latitude = it }, label = { Text("Latitude (خط العرض)") }, singleLine = true)
+            Button(onClick = {
+                try {
+                    val lon = longitude.toDouble()
+                    val lat = latitude.toDouble()
+                    val detectedZone = utmZoneFromLongitude(lon)
+                    val (e, n) = wgs84ToUtm(lon, lat, detectedZone)
+                    utmZone = detectedZone.toString()
+                    referenceEasting = String.format(Locale.US, "%.3f", e)
+                    referenceNorthing = String.format(Locale.US, "%.3f", n)
+                    status = "تم تحديد UTM Zone ${detectedZone}${if (lat >= 0) "N" else "S"} تلقائياً من موقع المشروع."
+                } catch (e: Exception) { status = e.message ?: "تعذر تحديد المنطقة." }
+            }, modifier = Modifier.fillMaxWidth()) { Text("تحديد Zone تلقائياً وحساب E/N") }
             OutlinedTextField(utmZone, { utmZone = it.filter(Char::isDigit).take(2) }, label = { Text("UTM Zone (1–60)") }, singleLine = true)
             OutlinedTextField(referenceEasting, { referenceEasting = it }, label = { Text("Easting (E) بالمتر") }, singleLine = true)
             OutlinedTextField(referenceNorthing, { referenceNorthing = it }, label = { Text("Northing (N) بالمتر") }, singleLine = true)
-            Text("يلزم إدخال نقطة مرجعية معروفة؛ المسافات وحدها لا تحدد الموقع الحقيقي.")
+            Text("تنبيه: إذا كان ملف DXF/DWG يحتوي UTM فقط، لا يمكن استنتاج الـ Zone من E/N وحدهما؛ أدخل موقعاً جغرافياً معروفاً أو اختر المنطقة يدوياً.")
         } },
         confirmButton = { TextButton(onClick = {
             val e0 = referenceEasting.toDoubleOrNull()
