@@ -208,8 +208,9 @@ private fun ZoomCircleButton(symbol: String, onClick: () -> Unit) {
 @Composable
 private fun ArkanApp() {
     val context = LocalContext.current
-    var whiteCanvas by remember { mutableStateOf(context.getSharedPreferences("arkan_settings", android.content.Context.MODE_PRIVATE).getBoolean("white_canvas", false)) }
+    var whiteCanvas by remember { mutableStateOf(true) }
     var showDisplaySettings by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
     LaunchedEffect(whiteCanvas) {
         context.getSharedPreferences("arkan_settings", android.content.Context.MODE_PRIVATE)
             .edit().putBoolean("white_canvas", whiteCanvas).apply()
@@ -372,6 +373,48 @@ private fun ArkanApp() {
     val importedDiameterLabelTotal = effectiveDiameterLengths.values.sum()
     val diameterUnclassifiedLength = importedUnclassifiedGeometryLength
     val trenchVolume = effectivePipeLength * (trenchWidth.toDoubleOrNull() ?: 0.0) * (trenchDepth.toDoubleOrNull() ?: 0.0)
+
+    // Automatic OSNAP: endpoints, corners, midpoints, circle centers and intersections.
+    fun snapCadPoint(raw: Offset): Offset {
+        val candidates = mutableListOf<Offset>()
+        val segments = mutableListOf<Pair<Offset, Offset>>()
+        cadEntities.forEach { entity ->
+            val pts = entity.points
+            when (entity.type) {
+                "RECTANGLE" -> if (pts.size >= 2) {
+                    val a=pts[0]; val b=pts[1]
+                    val corners=listOf(a,Offset(b.x,a.y),b,Offset(a.x,b.y))
+                    candidates.addAll(corners)
+                    for(i in corners.indices) segments.add(corners[i] to corners[(i+1)%corners.size])
+                }
+                "CIRCLE" -> if(pts.size>=2) candidates.add(pts[0])
+                else -> {
+                    candidates.addAll(pts)
+                    pts.zipWithNext().forEach { segments.add(it.first to it.second) }
+                }
+            }
+            if(entity.type=="ARC") candidates.addAll(arcPoints(pts,48))
+        }
+        pipes.forEach { candidates.add(it.a); candidates.add(it.b); segments.add(it.a to it.b) }
+        manholes.forEach { candidates.add(it.point) }
+        segments.forEach { (a,b) -> candidates.add(Offset((a.x+b.x)/2f,(a.y+b.y)/2f)) }
+        for(i in segments.indices) for(j in i+1 until segments.size) {
+            val (a,b)=segments[i]; val (c,d)=segments[j]
+            val den=(a.x-b.x)*(c.y-d.y)-(a.y-b.y)*(c.x-d.x)
+            if(kotlin.math.abs(den)>1e-5f) {
+                val t=((a.x-c.x)*(c.y-d.y)-(a.y-c.y)*(c.x-d.x))/den
+                val u=-((a.x-b.x)*(a.y-c.y)-(a.y-b.y)*(a.x-c.x))/den
+                if(t in 0f..1f && u in 0f..1f) candidates.add(Offset(a.x+t*(b.x-a.x),a.y+t*(b.y-a.y)))
+            }
+        }
+        var best: Offset?=null
+        var bestD=Float.MAX_VALUE
+        candidates.forEach { p ->
+            val d=hypot((p.x-raw.x).toDouble(),(p.y-raw.y).toDouble()).toFloat()
+            if(d<bestD){bestD=d;best=p}
+        }
+        return if(best!=null && bestD*viewZoom<=18f*context.resources.displayMetrics.density) best!! else raw
+    }
 
     val importScope = rememberCoroutineScope()
 
@@ -665,7 +708,8 @@ private fun ArkanApp() {
                         cadDraft = emptyList()
                         status = "تم إنهاء POLYLINE."
                     }
-                }, onTap = { tap ->
+                }, onTap = { screenTap ->
+                    val tap = snapCadPoint(Offset((screenTap.x-viewPanX)/viewZoom, (screenTap.y-viewPanY)/viewZoom))
                     lastCoordinateTap = tap
                     if (showCoordinateReadout) {
                         val x = tap.x / PX_PER_METER
@@ -1124,7 +1168,7 @@ private fun ArkanApp() {
                             val dx = b.x-a.x; val dy = b.y-a.y
                             val length = hypot(dx.toDouble(),dy.toDouble()).toFloat().coerceAtLeast(1f)
                             val nx = -dy/length; val ny = dx/length
-                            val off = 24f
+                            val off = 8f
                             val da = Offset(a.x+nx*off,a.y+ny*off); val db = Offset(b.x+nx*off,b.y+ny*off)
                             drawLine(entityColor,a,da,1.5f); drawLine(entityColor,b,db,1.5f); drawLine(entityColor,da,db,2f)
                             val arrow = 8f
@@ -1133,7 +1177,7 @@ private fun ArkanApp() {
                             drawLine(entityColor,db,Offset(db.x-(dx/length*arrow)+(nx*arrow*0.55f),db.y-(dy/length*arrow)+(ny*arrow*0.55f)),2f)
                             drawLine(entityColor,db,Offset(db.x-(dx/length*arrow)-(nx*arrow*0.55f),db.y-(dy/length*arrow)-(ny*arrow*0.55f)),2f)
                             val label = "%.4f".format(Locale.US,length/PX_PER_METER)
-                            val paint = Paint().apply { color = Color(0xFF00E5E5).toArgb(); textSize = 90f; isAntiAlias = true; textAlign = Paint.Align.CENTER; style = Paint.Style.FILL }
+                            val paint = Paint().apply { color = Color(0xFF00E5E5).toArgb(); textSize = 20f; isAntiAlias = true; isSubpixelText = true; textAlign = Paint.Align.CENTER; style = Paint.Style.FILL }
                             drawContext.canvas.nativeCanvas.drawText(label,(da.x+db.x)/2f,(da.y+db.y)/2f-7f,paint)
                         }
                         "DIMENSION", "DIM_ALIGNED", "DIM_LINEAR" -> if (entity.points.size >= 2) {
@@ -1141,7 +1185,7 @@ private fun ArkanApp() {
                             val dx = b.x-a.x; val dy = b.y-a.y
                             val length = hypot(dx.toDouble(),dy.toDouble()).toFloat().coerceAtLeast(1f)
                             val nx = -dy/length; val ny = dx/length
-                            val off = 22f
+                            val off = 8f
                             val da = Offset(a.x+nx*off,a.y+ny*off); val db = Offset(b.x+nx*off,b.y+ny*off)
                             drawLine(entityColor,a,da,1f); drawLine(entityColor,b,db,1f); drawLine(entityColor,da,db,2f)
                             val arrow = 7f
@@ -1223,6 +1267,16 @@ private fun ArkanApp() {
                 }
             }
             Box(Modifier.fillMaxSize()) {
+                Box(Modifier.align(androidx.compose.ui.Alignment.CenterEnd).padding(end = 6.dp)) {
+                    Surface(color = Color(0xFFFFD400), shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp), shadowElevation = 5.dp,
+                        modifier = Modifier.clickable { showReportDialog = true }) {
+                        Row(Modifier.padding(horizontal = 9.dp, vertical = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text("▤", color = Color.Black, fontSize = 17.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Text("تقرير", color = Color.Black, fontSize = 12.sp)
+                        }
+                    }
+                }
                 if (coordinateCursorActive && coordinateCursorPoint != null) {
                     val density = context.resources.displayMetrics.density
                     val cursor = coordinateCursorPoint!!
@@ -1469,7 +1523,7 @@ private fun ArkanApp() {
             }
             Spacer(Modifier.height(6.dp))
 
-            Column(Modifier.fillMaxWidth().heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
+            if (false) Column(Modifier.fillMaxWidth().heightIn(max = 150.dp).verticalScroll(rememberScrollState())) {
             Text("كل مربع = 1 متر (مقياس تجريبي) • $status", color=Color.White,fontSize=11.sp)
             Text("طول الأنابيب: %.2f م | المناهيل: %d | حفر المناهيل: %.2f م³".format(Locale.US,effectivePipeLength,if (importedKml != null) importedManholeCount else manholes.size,totalExcavation),color=Color(0xFF00C8A0),fontSize=12.sp)
             Text("حفر خنادق الأنابيب التقديري: %.2f م³".format(Locale.US,trenchVolume),color=Color(0xFF00C8A0),fontSize=12.sp)
@@ -1536,6 +1590,28 @@ private fun ArkanApp() {
             }
         }
     }
+
+    if (showReportDialog) AlertDialog(
+        onDismissRequest = { showReportDialog = false },
+        title = { Text("تقرير الكميات") },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("إجمالي أطوال الأنابيب: %.2f م".format(Locale.US,effectivePipeLength))
+                Text("عدد المناهيل: ${effectiveManholes.size}")
+                Text("حجم حفر المناهيل: %.2f م³".format(Locale.US,totalExcavation))
+                Text("عرض الخندق: $trenchWidth م | العمق: $trenchDepth م")
+                Text("حجم حفر الخندق التقديري: %.2f م³".format(Locale.US,trenchVolume))
+                Text("أطوال الأنابيب حسب الطبقة", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                effectiveLayerLengths.toSortedMap().forEach { (layer,length) -> Text("$layer : %.2f م".format(Locale.US,length)) }
+                Text("أطوال الأنابيب حسب القطر", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                displayedPipeDiameters.forEach { diameter -> Text("$diameter مم : %.2f م".format(Locale.US,effectiveDiameterLengths[diameter] ?: 0.0)) }
+                Text("جدول المناهيل", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                effectiveManholes.forEach { mh -> Text("${mh.id} | ${mh.type} | H ${mh.depth}م | GL ${mh.groundLevel ?: "-"} | INV ${mh.invertLevel ?: "-"} | N ${mh.northing} | E ${mh.easting}") }
+                Text("للتصدير إلى PDF أو Excel أو CSV استخدم أدوات التصدير.")
+            }
+        },
+        confirmButton = { TextButton(onClick = { showReportDialog = false }) { Text("إغلاق") } }
+    )
 
     if (showDisplaySettings) AlertDialog(
         onDismissRequest = { showDisplaySettings = false },
