@@ -446,16 +446,19 @@ private fun ArkanApp() {
             status = "تم اختيار ملف DWG؛ جارٍ نسخ الملف وتحويله وقراءة هندسته..."
             importScope.launch {
                 try {
-                    val converted = withContext(Dispatchers.IO) {
+                    val importData = withContext(Dispatchers.IO) {
                         val convertedFile = LibreDwgRunner.convertDwgToDxf(context, uri)
                         check(convertedFile.isFile && convertedFile.length() > 0L) {
                             "أداة التحويل لم تُنتج ملف DXF."
                         }
                         val dxfText = convertedFile.readText(Charsets.UTF_8)
                         check(dxfText.contains("SECTION", true) && dxfText.contains("ENTITIES", true)) {
-                            "ناتج المحوّل ليس DXF صالحاً أو لا يحتوي قسم ENTITIES."                        }
-                        DxfKmlImporter.convert(dxfText, utmZone.toIntOrNull() ?: 38)
+                            "ناتج المحوّل ليس DXF صالحاً أو لا يحتوي قسم ENTITIES."
+                        }
+                        dxfText to DxfKmlImporter.convert(dxfText, utmZone.toIntOrNull() ?: 38)
                     }
+                    val dxfText = importData.first
+                    val converted = importData.second
                     importedDxfRaw = dxfText
                     importedKml = converted.kml
                     importedSummary = converted.summary
