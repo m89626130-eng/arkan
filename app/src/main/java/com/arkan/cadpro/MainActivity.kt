@@ -709,7 +709,7 @@ private fun ArkanApp() {
                         status = "تم إنهاء POLYLINE."
                     }
                 }, onTap = { screenTap ->
-                    val tap = snapCadPoint(Offset((screenTap.x-viewPanX)/viewZoom, (screenTap.y-viewPanY)/viewZoom))
+                    val tap = snapCadPoint(screenTap)
                     lastCoordinateTap = tap
                     if (showCoordinateReadout) {
                         val x = tap.x / PX_PER_METER
