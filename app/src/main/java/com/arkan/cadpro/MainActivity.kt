@@ -739,10 +739,17 @@ private fun ArkanApp() {
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp).clipToBounds()) {
             Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { centroid, pan, zoomChange, _ ->
                 val oldZoom = viewZoom
-                val newZoom = (oldZoom * zoomChange).coerceIn(0.000001f, 100000f)
+                val newZoom = (oldZoom * zoomChange).coerceIn(0.05f, 100f)
                 val zoomRatio = newZoom / oldZoom
-                viewPanX = centroid.x - (centroid.x - viewPanX) * zoomRatio + pan.x
-                viewPanY = centroid.y - (centroid.y - viewPanY) * zoomRatio + pan.y
+                // Pointer coordinates are local to the transformed canvas. Convert the
+                // pinch centroid and pan delta to screen space so zoom stays under the
+                // midpoint between the two fingers instead of drifting toward one finger.
+                val focalScreenX = centroid.x * oldZoom + viewPanX
+                val focalScreenY = centroid.y * oldZoom + viewPanY
+                val panScreenX = pan.x * oldZoom
+                val panScreenY = pan.y * oldZoom
+                viewPanX = focalScreenX - (focalScreenX - viewPanX) * zoomRatio + panScreenX
+                viewPanY = focalScreenY - (focalScreenY - viewPanY) * zoomRatio + panScreenY
                 viewZoom = newZoom
             } }.pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
