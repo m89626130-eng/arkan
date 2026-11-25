@@ -752,12 +752,9 @@ private fun ArkanApp() {
                         status = "تم إنهاء POLYLINE."
                     }
                 }, onTap = { screenTap ->
-                    // Convert the canvas touch position back into model coordinates. This keeps drawing aligned after zoom/pan and allows long real-world lines while zoomed out.
-                    val modelTap = Offset(
-                        (screenTap.x - viewPanX) / viewZoom.coerceAtLeast(0.000001f),
-                        (screenTap.y - viewPanY) / viewZoom.coerceAtLeast(0.000001f)
-                    )
-                    val tap = snapCadPoint(modelTap)
+                    // Pointer coordinates are already mapped to this Canvas local space
+                    // by Compose hit testing through graphicsLayer. Do not invert pan/zoom twice.
+                    val tap = snapCadPoint(screenTap)
                     lastCoordinateTap = tap
                     if (showCoordinateReadout) {
                         val x = tap.x / PX_PER_METER
@@ -1315,7 +1312,7 @@ private fun ArkanApp() {
                 }
             }
             Box(Modifier.fillMaxSize()) {
-                Box(Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(end = 8.dp, bottom = 8.dp)) {
+                Box(Modifier.align(androidx.compose.ui.Alignment.BottomStart).padding(start = 8.dp, bottom = 8.dp)) {
                     Surface(color = Color(0xFFFFD400), shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp), shadowElevation = 5.dp,
                         modifier = Modifier.clickable { showReportDialog = true }) {
                         Row(Modifier.padding(horizontal = 9.dp, vertical = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
