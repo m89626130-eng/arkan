@@ -1171,7 +1171,7 @@ private fun ArkanApp() {
                         }
                     }
                 })
-            }).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY } {
+            }.graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }) {
                 // Plain black CAD workspace: grid removed; drawing is allowed anywhere on the canvas.
                 if (importedPaths.isNotEmpty() || importedManholes.isNotEmpty()) {
                     val bounds = importedBounds
