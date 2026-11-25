@@ -1117,8 +1117,33 @@ private fun ArkanApp() {
                             }
                         }
                         mode == "LINE" -> {
-                            if (cadDraft.isEmpty()) { cadDraft = listOf(tap); status = "حدد نقطة نهاية LINE." }
-                            else { cadEntities = cadEntities + CadEntity("LINE", listOf(cadDraft.first(), tap), currentCadLayer); cadRedo = emptyList(); cadDraft = emptyList(); status = "تم رسم LINE." }
+                            if (cadDraft.isEmpty()) {
+                                cadDraft = listOf(tap)
+                                status = "LINE: حدد نقطة النهاية؛ سيظهر الطول مباشرة على الرسم."
+                            } else {
+                                val first = cadDraft.first()
+                                val lengthPx = hypot((tap.x-first.x).toDouble(), (tap.y-first.y).toDouble())
+                                if (lengthPx < 1.0) {
+                                    status = "النقطتان متقاربتان جداً؛ حدد نقطة نهاية أخرى."
+                                } else {
+                                    val lengthM = lengthPx / PX_PER_METER
+                                    val dx = (tap.x-first.x) / PX_PER_METER
+                                    val dy = -(tap.y-first.y) / PX_PER_METER
+                                    val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
+                                    cadEntities = cadEntities +
+                                        CadEntity("LINE", listOf(first, tap), currentCadLayer) +
+                                        CadEntity("MEASURE_DIMENSION", listOf(first, tap), currentCadLayer, color = 0xFF00E5E5)
+                                    cadRedo = emptyList()
+                                    measureLengthValue = lengthM
+                                    measureAngleValue = angle
+                                    measureDeltaX = dx.toDouble()
+                                    measureDeltaY = dy.toDouble()
+                                    measureLastResult = "Length: %.3f m  |  Angle: %.2f°".format(Locale.US, lengthM, angle)
+                                    showMeasurePanel = true
+                                    status = measureLastResult
+                                    cadDraft = emptyList()
+                                }
+                            }
                         }
                         mode == "POLYLINE" -> {
                             cadDraft = cadDraft + tap
