@@ -242,7 +242,7 @@ private fun ZoomCircleButton(symbol: String, onClick: () -> Unit) {
 @Composable
 private fun ArkanApp() {
     val context = LocalContext.current
-    var whiteCanvas by remember { mutableStateOf(false) }
+    var whiteCanvas by remember { mutableStateOf(context.getSharedPreferences("arkan_settings", android.content.Context.MODE_PRIVATE).getBoolean("white_canvas", false)) }
     var showDisplaySettings by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
     LaunchedEffect(whiteCanvas) {
@@ -736,6 +736,8 @@ private fun ArkanApp() {
                 }, selected = coordinateCursorActive)
             }
             Spacer(Modifier.height(2.dp))
+            // Keep pointer handlers synchronized with the latest transform without restarting an active gesture.
+            val latestViewTransform by rememberUpdatedState(Triple(viewZoom, viewPanX, viewPanY))
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp).clipToBounds()) {
             Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).pointerInput(Unit) { detectTransformGestures { centroid, pan, zoomChange, _ ->
                 val oldZoom = viewZoom
@@ -754,9 +756,11 @@ private fun ArkanApp() {
                     }
                 }, onTap = { screenTap ->
                     // Convert viewport touch coordinates to CAD/world coordinates explicitly.
+                    val transform = latestViewTransform
+                    val safeZoom = transform.first.coerceAtLeast(0.0001f)
                     val worldTap = Offset(
-                        (screenTap.x - viewPanX) / viewZoom,
-                        (screenTap.y - viewPanY) / viewZoom
+                        (screenTap.x - transform.second) / safeZoom,
+                        (screenTap.y - transform.third) / safeZoom
                     )
                     val tap = snapCadPoint(worldTap)
                     lastCoordinateTap = tap
