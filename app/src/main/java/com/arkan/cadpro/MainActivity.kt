@@ -242,7 +242,7 @@ private fun ZoomCircleButton(symbol: String, onClick: () -> Unit) {
 @Composable
 private fun ArkanApp() {
     val context = LocalContext.current
-    var whiteCanvas by remember { mutableStateOf(context.getSharedPreferences("arkan_settings", android.content.Context.MODE_PRIVATE).getBoolean("white_canvas", false)) }
+    var whiteCanvas by remember { mutableStateOf(false) }
     var showDisplaySettings by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
     LaunchedEffect(whiteCanvas) {
@@ -737,19 +737,13 @@ private fun ArkanApp() {
             }
             Spacer(Modifier.height(2.dp))
             Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 240.dp).clipToBounds()) {
-            Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY }.pointerInput(Unit) { detectTransformGestures { centroid, pan, zoomChange, _ ->
+            Canvas(Modifier.fillMaxSize().background(if (whiteCanvas) Color.White else Color.Black).pointerInput(Unit) { detectTransformGestures { centroid, pan, zoomChange, _ ->
                 val oldZoom = viewZoom
                 val newZoom = (oldZoom * zoomChange).coerceIn(0.05f, 100f)
                 val zoomRatio = newZoom / oldZoom
-                // Pointer coordinates are local to the transformed canvas. Convert the
-                // pinch centroid and pan delta to screen space so zoom stays under the
-                // midpoint between the two fingers instead of drifting toward one finger.
-                val focalScreenX = centroid.x * oldZoom + viewPanX
-                val focalScreenY = centroid.y * oldZoom + viewPanY
-                val panScreenX = pan.x * oldZoom
-                val panScreenY = pan.y * oldZoom
-                viewPanX = focalScreenX - (focalScreenX - viewPanX) * zoomRatio + panScreenX
-                viewPanY = focalScreenY - (focalScreenY - viewPanY) * zoomRatio + panScreenY
+                // Pointer input is outside graphicsLayer, so centroid/pan are viewport pixels.
+                viewPanX = centroid.x - (centroid.x - viewPanX) * zoomRatio + pan.x
+                viewPanY = centroid.y - (centroid.y - viewPanY) * zoomRatio + pan.y
                 viewZoom = newZoom
             } }.pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
@@ -759,9 +753,12 @@ private fun ArkanApp() {
                         status = "تم إنهاء POLYLINE."
                     }
                 }, onTap = { screenTap ->
-                    // Pointer coordinates are already mapped to this Canvas local space
-                    // by Compose hit testing through graphicsLayer. Do not invert pan/zoom twice.
-                    val tap = snapCadPoint(screenTap)
+                    // Convert viewport touch coordinates to CAD/world coordinates explicitly.
+                    val worldTap = Offset(
+                        (screenTap.x - viewPanX) / viewZoom,
+                        (screenTap.y - viewPanY) / viewZoom
+                    )
+                    val tap = snapCadPoint(worldTap)
                     lastCoordinateTap = tap
                     if (showCoordinateReadout) {
                         val x = tap.x / PX_PER_METER
@@ -1170,7 +1167,7 @@ private fun ArkanApp() {
                         }
                     }
                 })
-            }) {
+            }).graphicsLayer { scaleX = viewZoom; scaleY = viewZoom; translationX = viewPanX; translationY = viewPanY } {
                 // Plain black CAD workspace: grid removed; drawing is allowed anywhere on the canvas.
                 if (importedPaths.isNotEmpty() || importedManholes.isNotEmpty()) {
                     val bounds = importedBounds
