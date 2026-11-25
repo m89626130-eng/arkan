@@ -366,9 +366,15 @@ private fun ArkanApp() {
             else -> null
         }
         if (completed != null) {
-            cadEntities = cadEntities + completed
+            val dimensions = if (mode == "LINE" || mode == "POLYLINE") {
+                completed.points.zipWithNext().map { (a, b) ->
+                    CadEntity("MEASURE_DIMENSION", listOf(a, b), "0", color = 0xFF00E5E5)
+                }
+            } else emptyList()
+            cadEntities = cadEntities + completed + dimensions
             cadRedo = emptyList()
-            status = "تم حفظ شكل $mode قبل الانتقال إلى EDIT."
+            status = if (dimensions.isNotEmpty()) "تم حفظ شكل $mode مع ${dimensions.size} قياس دائم."
+                else "تم حفظ شكل $mode قبل الانتقال إلى EDIT."
         }
         cadDraft = emptyList()
     }
@@ -749,10 +755,15 @@ private fun ArkanApp() {
                 viewZoom = newZoom
             } }.pointerInput(mode, pendingManhole, pipeLayer, targetSlopePercent, referenceEasting, referenceNorthing, currentCadLayer, cadColorValue) {
                 detectTapGestures(onDoubleTap = {
-                    if (mode == "POLYLINE" && cadDraft.size >= 2) {                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
+                    if (mode == "POLYLINE" && cadDraft.size >= 2) {
+                        val points = cadDraft.toList()
+                        val dimensions = points.zipWithNext().map { (a, b) ->
+                            CadEntity("MEASURE_DIMENSION", listOf(a, b), "0", color = 0xFF00E5E5)
+                        }
+                        cadEntities = cadEntities + CadEntity("POLYLINE", points, currentCadLayer) + dimensions
                         cadRedo = emptyList()
                         cadDraft = emptyList()
-                        status = "تم إنهاء POLYLINE."
+                        status = "تم إنهاء POLYLINE وحفظ ${dimensions.size} قياس لكل مقطع."
                     }
                 }, onTap = { screenTap ->
                     // Convert viewport touch coordinates to CAD/world coordinates explicitly.
@@ -1132,7 +1143,7 @@ private fun ArkanApp() {
                                     val angle = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0
                                     cadEntities = cadEntities +
                                         CadEntity("LINE", listOf(first, tap), currentCadLayer) +
-                                        CadEntity("MEASURE_DIMENSION", listOf(first, tap), currentCadLayer, color = 0xFF00E5E5)
+                                        CadEntity("MEASURE_DIMENSION", listOf(first, tap), "0", color = 0xFF00E5E5)
                                     cadRedo = emptyList()
                                     measureLengthValue = lengthM
                                     measureAngleValue = angle
@@ -1508,9 +1519,13 @@ private fun ArkanApp() {
                                 // Preserve an in-progress polyline before switching to another draw tool.
                                 if (mode == "POLYLINE" && tool != "POLYLINE") {
                                     if (cadDraft.size >= 2) {
-                                        cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
+                                        val points = cadDraft.toList()
+                                        val dimensions = points.zipWithNext().map { (a, b) ->
+                                            CadEntity("MEASURE_DIMENSION", listOf(a, b), "0", color = 0xFF00E5E5)
+                                        }
+                                        cadEntities = cadEntities + CadEntity("POLYLINE", points, currentCadLayer) + dimensions
                                         cadRedo = emptyList()
-                                        status = "تم حفظ POLYLINE تلقائياً قبل الانتقال إلى " + tool
+                                        status = "تم حفظ POLYLINE تلقائياً مع ${dimensions.size} قياس قبل الانتقال إلى " + tool
                                     } else if (cadDraft.isNotEmpty()) {
                                         status = "لم يكتمل POLYLINE؛ يلزم نقطتان على الأقل."
                                     }
