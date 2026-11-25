@@ -242,7 +242,7 @@ private fun ZoomCircleButton(symbol: String, onClick: () -> Unit) {
 @Composable
 private fun ArkanApp() {
     val context = LocalContext.current
-    var whiteCanvas by remember { mutableStateOf(true) }
+    var whiteCanvas by remember { mutableStateOf(context.getSharedPreferences("arkan_settings", android.content.Context.MODE_PRIVATE).getBoolean("white_canvas", false)) }
     var showDisplaySettings by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
     LaunchedEffect(whiteCanvas) {
