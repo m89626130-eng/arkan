@@ -1320,6 +1320,27 @@ private fun ArkanApp() {
                 }
             }
             Box(Modifier.fillMaxSize()) {
+                // Measurement feedback remains over the CAD viewport, not on a separate page.
+                if (showMeasurePanel && measureLastResult.isNotBlank()) {
+                    Surface(
+                        color = Color(0xEE202830),
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(10.dp),
+                        shadowElevation = 8.dp,
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter)
+                            .padding(top = 10.dp, start = 12.dp, end = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Text(measureLastResult, fontSize = 12.sp, color = Color.White)
+                            Spacer(Modifier.width(10.dp))
+                            Text("X", color = Color(0xFFFFD166), fontSize = 18.sp,
+                                modifier = Modifier.clickable { showMeasurePanel = false })
+                        }
+                    }
+                }
                 Box(Modifier.align(androidx.compose.ui.Alignment.BottomStart).padding(start = 8.dp, bottom = 8.dp)) {
                     Surface(color = Color(0xFFFFD400), shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp), shadowElevation = 5.dp,
                         modifier = Modifier.clickable { showReportDialog = true }) {
