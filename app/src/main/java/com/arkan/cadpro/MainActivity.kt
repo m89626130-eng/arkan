@@ -1595,9 +1595,13 @@ private fun ArkanApp() {
                     CadPaletteButton("✓", "FINISH", {
                         if (mode == "POLYLINE") {
                             if (cadDraft.size >= 2) {
-                                cadEntities = cadEntities + CadEntity("POLYLINE", cadDraft, currentCadLayer)
+                                val points = cadDraft.toList()
+                                val dimensions = points.zipWithNext().map { (a, b) ->
+                                    CadEntity("MEASURE_DIMENSION", listOf(a, b), "0", color = 0xFF00E5E5)
+                                }
+                                cadEntities = cadEntities + CadEntity("POLYLINE", points, currentCadLayer) + dimensions
                                 cadRedo = emptyList()
-                                status = "تم إنهاء POLYLINE."
+                                status = "تم إنهاء POLYLINE وحفظ ${dimensions.size} قياس لكل مقطع."
                             } else status = "حدد نقطتين على الأقل."
                             cadDraft = emptyList()
                         } else {
